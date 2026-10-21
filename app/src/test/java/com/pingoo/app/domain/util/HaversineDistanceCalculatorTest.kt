@@ -41,4 +41,25 @@ class HaversineDistanceCalculatorTest {
         )
         assertTrue("Short distance should be around 111 meters, got $distance", distance in 100.0..120.0)
     }
+
+    @Test
+    fun testAntipodalAndExtremeCoordinates() {
+        // Equator to North Pole (0,0 to 90,0) ~ 10,001 km
+        val equatorToPole = HaversineDistanceCalculator.calculateDistanceMeters(
+            startLat = 0.0,
+            startLng = 0.0,
+            endLat = 90.0,
+            endLng = 0.0
+        )
+        assertTrue("Equator to Pole should be ~10,000,000m, got: $equatorToPole", equatorToPole in 9990000.0..10020000.0)
+
+        // Across Date Line (0, 179.0 to 0, -179.0) ~ 222 km
+        val acrossDateLine = HaversineDistanceCalculator.calculateDistanceMeters(
+            startLat = 0.0,
+            startLng = 179.0,
+            endLat = 0.0,
+            endLng = -179.0
+        )
+        assertTrue("Across Date Line should be ~222,000m, got: $acrossDateLine", acrossDateLine in 220000.0..225000.0)
+    }
 }
