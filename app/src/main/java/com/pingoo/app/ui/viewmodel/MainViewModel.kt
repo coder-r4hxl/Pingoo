@@ -10,12 +10,16 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pingoo.app.data.datastore.UserPreferencesRepository
 import com.pingoo.app.data.local.AppDatabase
+import com.pingoo.app.data.local.entity.JourneyEntity
+import com.pingoo.app.data.local.entity.JourneyStopEntity
 import com.pingoo.app.data.repository.DestinationRepositoryImpl
 import com.pingoo.app.data.repository.SettingsRepositoryImpl
-import com.pingoo.app.domain.engine.StateMachineEvaluation
+import com.pingoo.app.domain.engine.MultiStopEvaluation
 import com.pingoo.app.domain.model.Destination
 import com.pingoo.app.domain.model.JourneyState
+import com.pingoo.app.domain.model.JourneyStop
 import com.pingoo.app.domain.model.Language
+import com.pingoo.app.domain.model.MultiStopJourney
 import com.pingoo.app.domain.model.UserSettings
 import com.pingoo.app.domain.usecase.ValidateDestinationUseCase
 import com.pingoo.app.domain.usecase.ValidationResult
@@ -34,8 +38,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.getDatabase(application)
     private val destinationDao = db.destinationDao()
-    private val destinationRepository = DestinationRepositoryImpl(destinationDao)
+    private val journeyDao = db.journeyDao()
 
+    private val destinationRepository = DestinationRepositoryImpl(destinationDao)
     private val userPreferencesRepository = UserPreferencesRepository(application)
     private val settingsRepository = SettingsRepositoryImpl(userPreferencesRepository)
 
@@ -47,10 +52,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedDestination = MutableStateFlow<Destination?>(null)
     val selectedDestination: StateFlow<Destination?> = _selectedDestination.asStateFlow()
 
-    private val _journeyEvaluation = MutableStateFlow(
-        StateMachineEvaluation(JourneyState.IDLE, null, "Idle")
+    private val _multiStopEvaluation = MutableStateFlow(
+        MultiStopEvaluation(JourneyState.IDLE, null, 0, 0, null, "Idle")
     )
-    val journeyEvaluation: StateFlow<StateMachineEvaluation> = _journeyEvaluation.asStateFlow()
+    val multiStopEvaluation: StateFlow<MultiStopEvaluation> = _multiStopEvaluation.asStateFlow()
+
+    // Multi-stop journey creation state
+    private val _stagedStops = MutableStateFlow<List<Destination>>(emptyList())
+    val stagedStops: StateFlow<List<Destination>> = _stagedStops.asStateFlow()
 
     val userSettings: StateFlow<UserSettings> = settingsRepository.getUserSettings()
         .stateIn(
@@ -89,8 +98,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             trackingService?.let { service ->
                 viewModelScope.launch {
-                    service.serviceEvaluation.collect { eval ->
-                        _journeyEvaluation.value = eval
+                    service.multiStopEvaluation.collect { eval ->
+                        _multiStopEvaluation.value = eval
                     }
                 }
             }
@@ -115,20 +124,98 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _selectedDestination.value = destination
     }
 
-    fun startJourney(destination: Destination) {
-        _selectedDestination.value = destination
+    fun addStagedStop(destination: Destination) {
+        _stagedStops.value = _stagedStops.value + destination
+    }
+
+    fun removeStagedStop(index: Int) {
+        if (index in _stagedStops.value.indices) {
+            val current = _stagedStops.value.toMutableList()
+            current.removeAt(index)
+            _stagedStops.value = current
+        }
+    }
+
+    fun moveStagedStopUp(index: Int) {
+        if (index > 0 && index < _stagedStops.value.size) {
+            val list = _stagedStops.value.toMutableList()
+            val item = list.removeAt(index)
+            list.add(index - 1, item)
+            _stagedStops.value = list
+        }
+    }
+
+    fun moveStagedStopDown(index: Int) {
+        if (index >= 0 && index < _stagedStops.value.size - 1) {
+            val list = _stagedStops.value.toMutableList()
+            val item = list.removeAt(index)
+            list.add(index + 1, item)
+            _stagedStops.value = list
+        }
+    }
+
+    fun clearStagedStops() {
+        _stagedStops.value = emptyList()
+    }
+
+    fun startSingleDestinationJourney(destination: Destination) {
+        val singleStopJourney = MultiStopJourney(
+            title = "Journey to ${destination.name}",
+            stops = listOf(
+                JourneyStop(
+                    destination = destination,
+                    stopOrder = 0
+                )
+            )
+        )
+        startMultiStopJourney(singleStopJourney)
+    }
+
+    fun startStagedMultiStopJourney(title: String) {
+        if (_stagedStops.value.isEmpty()) return
+
+        val stops = _stagedStops.value.mapIndexed { index, dest ->
+            JourneyStop(
+                destination = dest,
+                stopOrder = index
+            )
+        }
+
+        val journey = MultiStopJourney(
+            title = if (title.isBlank()) "Multi-Stop Journey (${stops.size} stops)" else title,
+            stops = stops
+        )
+
+        viewModelScope.launch {
+            val journeyId = journeyDao.insertJourney(
+                JourneyEntity(
+                    title = journey.title,
+                    activeStopIndex = 0
+                )
+            )
+            val stopEntities = stops.mapIndexed { idx, stop ->
+                JourneyStopEntity(
+                    journeyId = journeyId,
+                    destinationId = stop.destination.id,
+                    stopOrder = idx
+                )
+            }
+            journeyDao.insertJourneyStops(stopEntities)
+        }
+
+        startMultiStopJourney(journey)
+    }
+
+    fun startMultiStopJourney(journey: MultiStopJourney) {
         val context = getApplication<Application>()
         val intent = Intent(context, LocationTrackingService::class.java).apply {
             action = LocationTrackingService.ACTION_START_SERVICE
-            putExtra(LocationTrackingService.EXTRA_DEST_NAME, destination.name)
-            putExtra(LocationTrackingService.EXTRA_DEST_LAT, destination.latitude)
-            putExtra(LocationTrackingService.EXTRA_DEST_LNG, destination.longitude)
-            putExtra(LocationTrackingService.EXTRA_DEST_RADIUS, destination.arrivalRadiusMeters)
-            putExtra(LocationTrackingService.EXTRA_DEST_WARNING, destination.advanceWarningRadiusMeters)
         }
         context.startForegroundService(intent)
 
-        if (!isServiceBound) {
+        if (isServiceBound && trackingService != null) {
+            trackingService?.startMultiStopJourney(journey)
+        } else {
             bindTrackingService()
         }
     }
@@ -145,8 +232,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         trackingService?.snoozeAlarm()
     }
 
-    fun dismissAlarm() {
-        trackingService?.dismissAlarm()
+    fun dismissAlarmAndAdvance() {
+        trackingService?.dismissAlarmAndAdvance()
     }
 
     fun stopJourney() {

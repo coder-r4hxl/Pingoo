@@ -5,11 +5,23 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.pingoo.app.data.local.dao.DestinationDao
+import com.pingoo.app.data.local.dao.JourneyDao
 import com.pingoo.app.data.local.entity.DestinationEntity
+import com.pingoo.app.data.local.entity.JourneyEntity
+import com.pingoo.app.data.local.entity.JourneyStopEntity
 
-@Database(entities = [DestinationEntity::class], version = 1, exportSchema = false)
+@Database(
+    entities = [
+        DestinationEntity::class,
+        JourneyEntity::class,
+        JourneyStopEntity::class
+    ],
+    version = 2,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun destinationDao(): DestinationDao
+    abstract fun journeyDao(): JourneyDao
 
     companion object {
         @Volatile
@@ -21,7 +33,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "pingoo_database"
-                ).build()
+                )
+                .fallbackToDestructiveMigration()
+                .build()
                 INSTANCE = instance
                 instance
             }

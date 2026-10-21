@@ -43,6 +43,17 @@ data class AppStrings(
     val arrivalRadiusLabel: String,
     val journeyStateLabel: String,
 
+    val multiStopTitle: String,
+    val addStopToJourney: String,
+    val stagedStopsHeader: String,
+    val noStagedStopsPrompt: String,
+    val moveUp: String,
+    val moveDown: String,
+    val removeStop: String,
+    val startMultiStopJourney: String,
+    val advanceToNextStop: String,
+    val activeStopHeader: String,
+
     val historyTitle: String,
     val noHistoryYet: String,
 
@@ -88,19 +99,30 @@ object Translations {
         delete = "Delete",
         noDestinationsYet = "No destinations saved yet.",
 
-        journeyTitle = "Live Journey Tracker",
+        journeyTitle = "Live Multi-Stop Journey",
         liveGpsStatus = "GPS Status",
-        distanceToDestination = "Distance Remaining",
+        distanceToDestination = "Distance to Next Stop",
         startMonitoring = "Start Journey Tracking",
         stopMonitoring = "Stop Journey Tracking",
         pauseMonitoring = "Pause",
         resumeMonitoring = "Resume",
-        selectDestinationPrompt = "Select target destination:",
+        selectDestinationPrompt = "Select destination to add as stop:",
         permissionRequiredNotice = "Location permission is required to calculate live distance and trigger destination alerts in background.",
         grantPermissions = "Grant Location Permission",
         gpsAccuracyLabel = "GPS Accuracy",
         arrivalRadiusLabel = "Arrival Radius",
         journeyStateLabel = "State",
+
+        multiStopTitle = "Build Multi-Stop Route",
+        addStopToJourney = "+ Add Stop",
+        stagedStopsHeader = "Ordered Journey Stops",
+        noStagedStopsPrompt = "No stops added yet. Select destinations above to build an ordered route.",
+        moveUp = "Up",
+        moveDown = "Down",
+        removeStop = "Remove",
+        startMultiStopJourney = "Start Multi-Stop Journey",
+        advanceToNextStop = "Advance to Next Stop",
+        activeStopHeader = "Active Target Stop",
 
         historyTitle = "Journey History",
         noHistoryYet = "No previous arrival history logged.",
@@ -110,13 +132,13 @@ object Translations {
         selectLanguage = "Select Language",
         vibrationSetting = "Vibration Alert",
         defaultRadiusSetting = "Default Arrival Radius (Meters)",
-        appVersion = "Pingoo v1.0.0 (Phase 3)",
-        phaseNotice = "Phase 3 Alarm Engine Active. Full-screen arrival alert, ringtone, vibration, snooze and dismissal enabled.",
+        appVersion = "Pingoo v1.0.0 (Phase 4)",
+        phaseNotice = "Phase 4 Multi-Stop Engine Active. Ordered train/bus route tracking and automatic stop advancement enabled.",
 
-        alarmArrivalHeader = "ARRIVED AT DESTINATION!",
+        alarmArrivalHeader = "ARRIVED AT STOP!",
         alarmArrivedMessage = "You have reached your destination radius.",
         alarmSnoozeButton = "Snooze (5 Mins)",
-        alarmDismissButton = "Dismiss Alarm"
+        alarmDismissButton = "Acknowledge & Next Stop"
     )
 
     val hindi = AppStrings(
@@ -146,19 +168,30 @@ object Translations {
         delete = "हटाएं",
         noDestinationsYet = "अभी तक कोई गंतव्य सहेजा नहीं गया है।",
 
-        journeyTitle = "लाइव यात्रा ट्रैकर",
+        journeyTitle = "लाइव मल्टी-स्टॉप यात्रा",
         liveGpsStatus = "जीपीएस स्थिति",
-        distanceToDestination = "शेष दूरी",
+        distanceToDestination = "अगले स्टॉप की दूरी",
         startMonitoring = "यात्रा ट्रैकिंग शुरू करें",
         stopMonitoring = "यात्रा ट्रैकिंग रोकें",
         pauseMonitoring = "विराम (Pause)",
         resumeMonitoring = "पुनः प्रारंभ (Resume)",
-        selectDestinationPrompt = "लक्ष्य गंतव्य चुनें:",
+        selectDestinationPrompt = "स्टॉप के रूप में जोड़ने के लिए गंतव्य चुनें:",
         permissionRequiredNotice = "लाइव दूरी की गणना करने और बैकग्राउंड में अलर्ट ट्रिगर करने के लिए स्थान अनुमति आवश्यक है।",
         grantPermissions = "स्थान अनुमति दें",
         gpsAccuracyLabel = "जीपीएस सटीकता",
         arrivalRadiusLabel = "पहुँच त्रिज्या",
         journeyStateLabel = "स्थिति",
+
+        multiStopTitle = "मल्टी-स्टॉप रूट बनाएं",
+        addStopToJourney = "+ स्टॉप जोड़ें",
+        stagedStopsHeader = "क्रमानुसार यात्रा स्टॉप",
+        noStagedStopsPrompt = "अभी तक कोई स्टॉप नहीं जोड़ा गया। क्रमानुसार रूट बनाने के लिए ऊपर गंतव्य चुनें।",
+        moveUp = "ऊपर",
+        moveDown = "नीचे",
+        removeStop = "हटाएं",
+        startMultiStopJourney = "मल्टी-स्टॉप यात्रा शुरू करें",
+        advanceToNextStop = "अगले स्टॉप पर बढ़ें",
+        activeStopHeader = "सक्रिय लक्ष्य स्टॉप",
 
         historyTitle = "यात्रा इतिहास",
         noHistoryYet = "कोई पिछला आगमन इतिहास नहीं दर्ज है।",
@@ -168,13 +201,13 @@ object Translations {
         selectLanguage = "भाषा चुनें",
         vibrationSetting = "कंपन अलर्ट (Vibration)",
         defaultRadiusSetting = "डिफ़ॉल्ट पहुँच त्रिज्या (मीटर)",
-        appVersion = "पिंगू v1.0.0 (चरण 3)",
-        phaseNotice = "चरण 3 अलार्म इंजन सक्रिय है। फुल-स्क्रीन आगमन अलर्ट, रिंगटोन, कंपन, स्नूज़ और स्नूज़ बटन सक्षम हैं।",
+        appVersion = "पिंगू v1.0.0 (चरण 4)",
+        phaseNotice = "चरण 4 मल्टी-स्टॉप इंजन सक्रिय है। ट्रेन/बस मार्ग ट्रैकिंग और स्वचालित स्टॉप प्रगति सक्षम है।",
 
-        alarmArrivalHeader = "गंतव्य पर पहुँच गए!",
+        alarmArrivalHeader = "स्टॉप पर पहुँच गए!",
         alarmArrivedMessage = "आप अपने लक्ष्य गंतव्य की त्रिज्या में पहुँच चुके हैं।",
         alarmSnoozeButton = "स्नूज़ करें (5 मिनट)",
-        alarmDismissButton = "अलार्म बंद करें"
+        alarmDismissButton = "स्वीकार करें और अगला स्टॉप"
     )
 
     fun get(language: Language): AppStrings = when (language) {

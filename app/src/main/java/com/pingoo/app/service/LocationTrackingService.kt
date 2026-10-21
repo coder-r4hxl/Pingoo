@@ -17,12 +17,13 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.pingoo.app.MainActivity
-import com.pingoo.app.domain.engine.AlarmManagerEngine
-import com.pingoo.app.domain.engine.ArrivalStateMachine
-import com.pingoo.app.domain.engine.StateMachineEvaluation
+import com.pingoo.app.domain.engine.MultiStopEngine
+import com.pingoo.app.domain.engine.MultiStopEvaluation
 import com.pingoo.app.domain.model.Destination
 import com.pingoo.app.domain.model.GpsFix
 import com.pingoo.app.domain.model.JourneyState
+import com.pingoo.app.domain.model.JourneyStop
+import com.pingoo.app.domain.model.MultiStopJourney
 import com.pingoo.app.domain.util.DistanceFormatter
 import com.pingoo.app.service.alarm.AlarmPlayer
 import com.pingoo.app.ui.alarm.AlarmActivity
@@ -33,14 +34,13 @@ import kotlinx.coroutines.flow.asStateFlow
 class LocationTrackingService : Service(), LocationListener, LocationServiceContract {
 
     private val binder = LocalBinder()
-    private val stateMachine = ArrivalStateMachine()
-    private val alarmEngine = AlarmManagerEngine()
+    private val multiStopEngine = MultiStopEngine()
     private lateinit var alarmPlayer: AlarmPlayer
 
-    private val _serviceEvaluation = MutableStateFlow<StateMachineEvaluation>(
-        StateMachineEvaluation(JourneyState.IDLE, null, "Tracking Service Idle")
+    private val _multiStopEvaluation = MutableStateFlow<MultiStopEvaluation>(
+        MultiStopEvaluation(JourneyState.IDLE, null, 0, 0, null, "Tracking Service Idle")
     )
-    val serviceEvaluation: StateFlow<StateMachineEvaluation> = _serviceEvaluation.asStateFlow()
+    val multiStopEvaluation: StateFlow<MultiStopEvaluation> = _multiStopEvaluation.asStateFlow()
 
     private var locationManager: LocationManager? = null
     private var isTrackingActive = false
@@ -59,41 +59,22 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val initialEval = stateMachine.lastFix?.let {
-            stateMachine.processGpsFix(it)
-        } ?: StateMachineEvaluation(stateMachine.state, stateMachine.lastDistance, "Tracking Service Active")
-
+        val initialEval = _multiStopEvaluation.value
         startForeground(NOTIFICATION_ID, buildNotification(initialEval))
 
         when (intent?.action) {
-            ACTION_START_SERVICE -> {
-                val destName = intent.getStringExtra(EXTRA_DEST_NAME) ?: "Destination"
-                val destLat = intent.getDoubleExtra(EXTRA_DEST_LAT, 0.0)
-                val destLng = intent.getDoubleExtra(EXTRA_DEST_LNG, 0.0)
-                val destRadius = intent.getIntExtra(EXTRA_DEST_RADIUS, 500)
-                val destWarning = intent.getIntExtra(EXTRA_DEST_WARNING, 2000)
-
-                val destination = Destination(
-                    name = destName,
-                    latitude = destLat,
-                    longitude = destLng,
-                    arrivalRadiusMeters = destRadius,
-                    advanceWarningRadiusMeters = destWarning
-                )
-                startJourneyTracking(destination)
-            }
             ACTION_STOP_SERVICE -> stopMonitoring()
             ACTION_PAUSE_SERVICE -> pauseMonitoring()
             ACTION_RESUME_SERVICE -> resumeMonitoring()
             ACTION_SNOOZE_ALARM -> snoozeAlarm()
-            ACTION_DISMISS_ALARM -> dismissAlarm()
+            ACTION_DISMISS_ALARM -> dismissAlarmAndAdvance()
         }
         return START_STICKY
     }
 
-    fun startJourneyTracking(destination: Destination) {
-        val eval = stateMachine.startTracking(destination)
-        _serviceEvaluation.value = eval
+    fun startMultiStopJourney(journey: MultiStopJourney) {
+        val eval = multiStopEngine.startJourney(journey)
+        _multiStopEvaluation.value = eval
 
         updateNotification(eval)
         isTrackingActive = true
@@ -101,30 +82,35 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
     }
 
     fun pauseMonitoring() {
-        val eval = stateMachine.pauseTracking()
-        _serviceEvaluation.value = eval
+        val eval = multiStopEngine.pauseJourney()
+        _multiStopEvaluation.value = eval
         alarmPlayer.stopAlarm()
         unregisterLocationUpdates()
         updateNotification(eval)
     }
 
     fun resumeMonitoring() {
-        val eval = stateMachine.resumeTracking()
-        _serviceEvaluation.value = eval
+        val eval = multiStopEngine.resumeJourney()
+        _multiStopEvaluation.value = eval
         registerLocationUpdates()
         updateNotification(eval)
     }
 
     fun snoozeAlarm() {
-        val destId = stateMachine.destination?.id ?: 0L
-        alarmEngine.snoozeArrival(destId)
+        val destId = multiStopEngine.journey?.currentStop?.destination?.id ?: 0L
+        multiStopEngine.alarmEngine.snoozeArrival(destId)
         alarmPlayer.stopAlarm()
     }
 
-    fun dismissAlarm() {
-        val destId = stateMachine.destination?.id ?: 0L
-        alarmEngine.acknowledgeArrival(destId)
+    fun dismissAlarmAndAdvance() {
         alarmPlayer.stopAlarm()
+        val eval = multiStopEngine.acknowledgeActiveStopAndAdvance()
+        _multiStopEvaluation.value = eval
+        updateNotification(eval)
+
+        if (eval.isJourneyCompleted) {
+            stopMonitoring()
+        }
     }
 
     override fun startMonitoring() {
@@ -132,8 +118,8 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
     }
 
     override fun stopMonitoring() {
-        val eval = stateMachine.stopTracking()
-        _serviceEvaluation.value = eval
+        val eval = multiStopEngine.stopJourney()
+        _multiStopEvaluation.value = eval
         isTrackingActive = false
         alarmPlayer.stopAlarm()
         unregisterLocationUpdates()
@@ -153,9 +139,8 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
         ) == PackageManager.PERMISSION_GRANTED
 
         if (!hasFine && !hasCoarse) {
-            val eval = stateMachine.markGpsUnavailable("Location permissions not granted")
-            _serviceEvaluation.value = eval
-            updateNotification(eval)
+            val eval = multiStopEngine.stateMachine.markGpsUnavailable("Location permissions not granted")
+            updateFromStateMachine(eval.state, eval.statusMessage)
             return
         }
 
@@ -165,9 +150,8 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
                 val networkEnabled = lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
 
                 if (!gpsEnabled && !networkEnabled) {
-                    val eval = stateMachine.markGpsUnavailable("GPS and Network location providers disabled")
-                    _serviceEvaluation.value = eval
-                    updateNotification(eval)
+                    val eval = multiStopEngine.stateMachine.markGpsUnavailable("GPS and Network location providers disabled")
+                    updateFromStateMachine(eval.state, eval.statusMessage)
                     return
                 }
 
@@ -188,10 +172,16 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
                 }
             }
         } catch (e: SecurityException) {
-            val eval = stateMachine.markGpsUnavailable("Location permission security exception")
-            _serviceEvaluation.value = eval
-            updateNotification(eval)
+            val eval = multiStopEngine.stateMachine.markGpsUnavailable("Location permission security exception")
+            updateFromStateMachine(eval.state, eval.statusMessage)
         }
+    }
+
+    private fun updateFromStateMachine(state: JourneyState, statusMessage: String) {
+        val current = _multiStopEvaluation.value
+        val updated = current.copy(journeyState = state, statusMessage = statusMessage)
+        _multiStopEvaluation.value = updated
+        updateNotification(updated)
     }
 
     private fun unregisterLocationUpdates() {
@@ -211,25 +201,24 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
             speedMetersPerSecond = if (location.hasSpeed()) location.speed else null,
             provider = location.provider ?: "unknown"
         )
-        val eval = stateMachine.processGpsFix(fix)
-        _serviceEvaluation.value = eval
+        val eval = multiStopEngine.processGpsFix(fix)
+        _multiStopEvaluation.value = eval
 
-        if (eval.state == JourneyState.ARRIVED) {
-            val destId = stateMachine.destination?.id ?: 0L
-            if (alarmEngine.isArrivalAlertAllowed(destId)) {
-                alarmPlayer.startAlarm(vibrate = stateMachine.destination?.vibrate ?: true)
-                launchAlarmActivity()
+        if (eval.journeyState == JourneyState.ARRIVED) {
+            val destId = eval.activeStop?.destination?.id ?: 0L
+            if (multiStopEngine.alarmEngine.isArrivalAlertAllowed(destId)) {
+                alarmPlayer.startAlarm(vibrate = eval.activeStop?.destination?.vibrate ?: true)
+                launchAlarmActivity(eval.activeStop?.destination?.name ?: "Destination")
             }
         }
 
         updateNotification(eval)
     }
 
-    private fun launchAlarmActivity() {
-        val destName = stateMachine.destination?.name ?: "Destination"
+    private fun launchAlarmActivity(destinationName: String) {
         val alarmIntent = Intent(this, AlarmActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra(AlarmActivity.EXTRA_DEST_NAME, destName)
+            putExtra(AlarmActivity.EXTRA_DEST_NAME, destinationName)
         }
         startActivity(alarmIntent)
     }
@@ -239,9 +228,8 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
     }
 
     override fun onProviderDisabled(provider: String) {
-        val eval = stateMachine.markGpsUnavailable("Location provider ($provider) disabled")
-        _serviceEvaluation.value = eval
-        updateNotification(eval)
+        val eval = multiStopEngine.stateMachine.markGpsUnavailable("Location provider ($provider) disabled")
+        updateFromStateMachine(eval.state, eval.statusMessage)
     }
 
     private fun createNotificationChannel() {
@@ -258,7 +246,7 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
         }
     }
 
-    private fun buildNotification(eval: StateMachineEvaluation): Notification {
+    private fun buildNotification(eval: MultiStopEvaluation): Notification {
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
@@ -273,32 +261,33 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val destName = stateMachine.destination?.name ?: "Destination"
-        val distText = DistanceFormatter.formatDistance(eval.distanceMeters)
+        val stopName = eval.activeStop?.destination?.name ?: "Destination"
+        val distText = DistanceFormatter.formatDistance(eval.distanceToActiveStopMeters)
+        val stopProgressText = if (eval.totalStops > 0) "Stop ${eval.activeStopIndex + 1}/${eval.totalStops}: $stopName" else stopName
 
-        val contentTitle = when (eval.state) {
-            JourneyState.ARRIVED -> "Arrived at $destName!"
-            JourneyState.APPROACHING -> "Approaching $destName"
-            JourneyState.TRACKING -> "Tracking journey to $destName"
-            JourneyState.PAUSED -> "Journey to $destName paused"
+        val contentTitle = when (eval.journeyState) {
+            JourneyState.ARRIVED -> "Arrived at $stopName!"
+            JourneyState.APPROACHING -> "Approaching $stopName"
+            JourneyState.TRACKING -> "Tracking to $stopName"
+            JourneyState.PAUSED -> "Journey Paused"
             JourneyState.GPS_UNAVAILABLE -> "GPS Signal Issue"
             else -> "Pingoo Journey Tracker"
         }
 
-        val contentText = "Distance: $distText • Status: ${eval.state}"
+        val contentText = "$stopProgressText • Rem: $distText"
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(contentTitle)
             .setContentText(contentText)
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(pendingIntent)
-            .setOngoing(eval.state != JourneyState.IDLE && eval.state != JourneyState.ARRIVED)
+            .setOngoing(eval.journeyState != JourneyState.IDLE && eval.journeyState != JourneyState.ARRIVED)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
 
-    private fun updateNotification(eval: StateMachineEvaluation) {
+    private fun updateNotification(eval: MultiStopEvaluation) {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(NOTIFICATION_ID, buildNotification(eval))
     }

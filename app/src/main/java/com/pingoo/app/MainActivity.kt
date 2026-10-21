@@ -84,7 +84,8 @@ fun MainAppScreen(
     )
 
     val selectedDestination by viewModel.selectedDestination.collectAsState()
-    val journeyEvaluation by viewModel.journeyEvaluation.collectAsState()
+    val stagedStops by viewModel.stagedStops.collectAsState()
+    val multiStopEvaluation by viewModel.multiStopEvaluation.collectAsState()
 
     Scaffold(
         bottomBar = {
@@ -144,12 +145,19 @@ fun MainAppScreen(
                     strings = strings,
                     destinations = destinations,
                     selectedDestination = selectedDestination,
-                    evaluation = journeyEvaluation,
+                    stagedStops = stagedStops,
+                    evaluation = multiStopEvaluation,
                     language = userSettings.language,
                     onSelectDestination = { viewModel.selectDestination(it) },
-                    onStartJourney = { viewModel.startJourney(it) },
+                    onAddStagedStop = { viewModel.addStagedStop(it) },
+                    onRemoveStagedStop = { viewModel.removeStagedStop(it) },
+                    onMoveStagedStopUp = { viewModel.moveStagedStopUp(it) },
+                    onMoveStagedStopDown = { viewModel.moveStagedStopDown(it) },
+                    onStartSingleJourney = { viewModel.startSingleDestinationJourney(it) },
+                    onStartMultiStopJourney = { viewModel.startStagedMultiStopJourney(it) },
                     onPauseJourney = { viewModel.pauseJourney() },
                     onResumeJourney = { viewModel.resumeJourney() },
+                    onDismissAlarmAndAdvance = { viewModel.dismissAlarmAndAdvance() },
                     onStopJourney = { viewModel.stopJourney() }
                 )
             }

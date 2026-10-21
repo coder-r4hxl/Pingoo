@@ -11,41 +11,14 @@ Pingoo is a native Android GPS-based multi-destination alarm and travel companio
 - **Language:** Kotlin
 - **UI Framework:** Jetpack Compose + Material 3
 - **Architecture:** MVVM / Clean Architecture (UI, Domain, Data, Service layers)
-- **State Machine:** Deterministic `ArrivalStateMachine` (`IDLE`, `TRACKING`, `APPROACHING`, `ARRIVED`, `PAUSED`, `GPS_UNAVAILABLE`)
+- **Multi-Stop Engine:** Deterministic `MultiStopEngine` for ordered train/bus routes
 - **Background Engine:** Android Foreground Service with `foregroundServiceType="location"`
-- **Database:** Room Database (Offline local storage)
+- **Database:** Room Database v2 (`destinations`, `journeys`, `journey_stops`)
 - **Preferences:** Jetpack DataStore Preferences
 - **Asynchrony:** Kotlin Coroutines & StateFlow
 - **Minimum SDK:** API 26 (Android 8.0)
 - **Target SDK:** API 34 (Android 14)
 - **Package Name:** `com.pingoo.app`
-
----
-
-## Project Structure
-
-```text
-com.pingoo.app/
-├── data/
-│   ├── datastore/            # DataStore for user preferences (language, vibration)
-│   ├── local/                # Room database, DAO, entities
-│   └── repository/           # Repository implementations
-├── domain/
-│   ├── engine/               # ArrivalStateMachine for journey tracking
-│   ├── model/                # Core domain entities (Destination, Settings, Language, GpsFix)
-│   ├── repository/           # Repository interfaces
-│   ├── usecase/              # Business validation use cases
-│   └── util/                 # Haversine distance calculator & DistanceFormatter
-├── service/                  # LocationTrackingService (Foreground location service)
-├── ui/
-│   ├── i18n/                 # AppStrings and English/Hindi translations
-│   ├── navigation/           # Screen routing
-│   ├── screens/              # Jetpack Compose screens (Home, Destinations, Journey, History, Settings)
-│   ├── theme/                # Material 3 colors and theme
-│   └── viewmodel/            # MainViewModel
-├── MainActivity.kt           # App entry point with Bottom Navigation
-└── PingooApplication.kt      # Application class
-```
 
 ---
 

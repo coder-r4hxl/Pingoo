@@ -8,12 +8,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,7 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.pingoo.app.domain.engine.StateMachineEvaluation
+import com.pingoo.app.domain.engine.MultiStopEvaluation
 import com.pingoo.app.domain.model.Destination
 import com.pingoo.app.domain.model.JourneyState
 import com.pingoo.app.domain.model.Language
@@ -282,12 +286,19 @@ fun JourneyScreen(
     strings: AppStrings,
     destinations: List<Destination>,
     selectedDestination: Destination?,
-    evaluation: StateMachineEvaluation,
+    stagedStops: List<Destination>,
+    evaluation: MultiStopEvaluation,
     language: Language,
     onSelectDestination: (Destination) -> Unit,
-    onStartJourney: (Destination) -> Unit,
+    onAddStagedStop: (Destination) -> Unit,
+    onRemoveStagedStop: (Int) -> Unit,
+    onMoveStagedStopUp: (Int) -> Unit,
+    onMoveStagedStopDown: (Int) -> Unit,
+    onStartSingleJourney: (Destination) -> Unit,
+    onStartMultiStopJourney: (String) -> Unit,
     onPauseJourney: () -> Unit,
     onResumeJourney: () -> Unit,
+    onDismissAlarmAndAdvance: () -> Unit,
     onStopJourney: () -> Unit
 ) {
     val context = LocalContext.current
@@ -307,6 +318,7 @@ fun JourneyScreen(
     }
 
     var dropdownExpanded by remember { mutableStateOf(false) }
+    var journeyTitleInput by remember { mutableStateOf("Commute Route") }
 
     Column(
         modifier = Modifier
@@ -314,7 +326,7 @@ fun JourneyScreen(
             .padding(16.dp)
     ) {
         Text(text = strings.journeyTitle, style = MaterialTheme.typography.headlineMedium)
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         if (!hasLocationPermission) {
             Card(
@@ -344,149 +356,237 @@ fun JourneyScreen(
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
         }
 
-        // Target Destination Selection
-        Text(text = strings.selectDestinationPrompt, style = MaterialTheme.typography.titleMedium)
-        Spacer(modifier = Modifier.height(8.dp))
-
-        ExposedDropdownMenuBox(
-            expanded = dropdownExpanded,
-            onExpandedChange = { dropdownExpanded = !dropdownExpanded }
-        ) {
-            OutlinedTextField(
-                value = selectedDestination?.name ?: "Select Destination",
-                onValueChange = {},
-                readOnly = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded) },
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth()
-            )
-            ExposedDropdownMenu(
-                expanded = dropdownExpanded,
-                onDismissRequest = { dropdownExpanded = false }
+        // Active Journey Card (if active)
+        if (evaluation.journeyState != JourneyState.IDLE) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = when (evaluation.journeyState) {
+                        JourneyState.ARRIVED -> MaterialTheme.colorScheme.secondaryContainer
+                        JourneyState.APPROACHING -> MaterialTheme.colorScheme.tertiaryContainer
+                        else -> MaterialTheme.colorScheme.surfaceVariant
+                    }
+                )
             ) {
-                destinations.forEach { dest ->
-                    DropdownMenuItem(
-                        text = { Text(dest.name) },
-                        onClick = {
-                            onSelectDestination(dest)
-                            dropdownExpanded = false
-                        }
-                    )
-                }
-            }
-        }
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${strings.journeyStateLabel}: ${evaluation.journeyState.name}",
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Navigation,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Live Tracker Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = when (evaluation.state) {
-                    JourneyState.ARRIVED -> MaterialTheme.colorScheme.secondaryContainer
-                    JourneyState.APPROACHING -> MaterialTheme.colorScheme.tertiaryContainer
-                    else -> MaterialTheme.colorScheme.surfaceVariant
-                }
-            )
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "${strings.journeyStateLabel}: ${evaluation.state.name}",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    Icon(
-                        imageVector = Icons.Default.Navigation,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "${strings.distanceToDestination}: ${DistanceFormatter.formatDistance(evaluation.distanceMeters, language)}",
-                    style = MaterialTheme.typography.headlineSmall
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Status: ${evaluation.statusMessage}",
-                    style = MaterialTheme.typography.bodySmall
-                )
-
-                selectedDestination?.let { dest ->
                     Spacer(modifier = Modifier.height(8.dp))
+
+                    evaluation.activeStop?.let { stop ->
+                        Text(
+                            text = "Active Stop (${evaluation.activeStopIndex + 1}/${evaluation.totalStops}): ${stop.destination.name}",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "${strings.arrivalRadiusLabel}: ${dest.arrivalRadiusMeters}m • Target: (${dest.latitude}, ${dest.longitude})",
+                        text = "${strings.distanceToDestination}: ${DistanceFormatter.formatDistance(evaluation.distanceToActiveStopMeters, language)}",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Status: ${evaluation.statusMessage}",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        // Action Controls
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            when (evaluation.state) {
-                JourneyState.IDLE -> {
-                    Button(
-                        enabled = selectedDestination != null && hasLocationPermission,
-                        onClick = { selectedDestination?.let { onStartJourney(it) } }
+            // Control Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                when (evaluation.journeyState) {
+                    JourneyState.TRACKING, JourneyState.APPROACHING, JourneyState.GPS_UNAVAILABLE -> {
+                        Button(onClick = onPauseJourney) {
+                            Icon(Icons.Default.Pause, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(strings.pauseMonitoring)
+                        }
+                        Button(
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            onClick = onStopJourney
+                        ) {
+                            Icon(Icons.Default.Stop, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(strings.stopMonitoring)
+                        }
+                    }
+                    JourneyState.PAUSED -> {
+                        Button(onClick = onResumeJourney) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(strings.resumeMonitoring)
+                        }
+                        Button(
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            onClick = onStopJourney
+                        ) {
+                            Icon(Icons.Default.Stop, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(strings.stopMonitoring)
+                        }
+                    }
+                    JourneyState.ARRIVED -> {
+                        Button(onClick = onDismissAlarmAndAdvance) {
+                            Icon(Icons.Default.SkipNext, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(strings.advanceToNextStop)
+                        }
+                        Button(
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            onClick = onStopJourney
+                        ) {
+                            Icon(Icons.Default.Stop, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(strings.stopMonitoring)
+                        }
+                    }
+                    else -> {}
+                }
+            }
+        } else {
+            // Idle State: Multi-Stop Route Builder UI
+            Text(text = strings.multiStopTitle, style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ExposedDropdownMenuBox(
+                    expanded = dropdownExpanded,
+                    onExpandedChange = { dropdownExpanded = !dropdownExpanded },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        value = selectedDestination?.name ?: "Select Destination",
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = dropdownExpanded,
+                        onDismissRequest = { dropdownExpanded = false }
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(strings.startMonitoring)
+                        destinations.forEach { dest ->
+                            DropdownMenuItem(
+                                text = { Text(dest.name) },
+                                onClick = {
+                                    onSelectDestination(dest)
+                                    dropdownExpanded = false
+                                }
+                            )
+                        }
                     }
                 }
-                JourneyState.TRACKING, JourneyState.APPROACHING, JourneyState.GPS_UNAVAILABLE -> {
-                    Button(onClick = onPauseJourney) {
-                        Icon(Icons.Default.Pause, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(strings.pauseMonitoring)
-                    }
-                    Button(
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                        onClick = onStopJourney
-                    ) {
-                        Icon(Icons.Default.Stop, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(strings.stopMonitoring)
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Button(
+                    enabled = selectedDestination != null,
+                    onClick = { selectedDestination?.let { onAddStagedStop(it) } }
+                ) {
+                    Text(strings.addStopToJourney)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(text = strings.stagedStopsHeader, style = MaterialTheme.typography.titleSmall)
+            Spacer(modifier = Modifier.height(4.dp))
+
+            if (stagedStops.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = strings.noStagedStopsPrompt,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                LazyColumn(modifier = Modifier.weight(1f)) {
+                    itemsIndexed(stagedStops) { index, stop ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "${index + 1}. ${stop.name}",
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Text(
+                                        text = "Radius: ${stop.arrivalRadiusMeters}m",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+
+                                Row {
+                                    IconButton(
+                                        enabled = index > 0,
+                                        onClick = { onMoveStagedStopUp(index) }
+                                    ) {
+                                        Icon(Icons.Default.ArrowUpward, contentDescription = strings.moveUp)
+                                    }
+                                    IconButton(
+                                        enabled = index < stagedStops.size - 1,
+                                        onClick = { onMoveStagedStopDown(index) }
+                                    ) {
+                                        Icon(Icons.Default.ArrowDownward, contentDescription = strings.moveDown)
+                                    }
+                                    IconButton(onClick = { onRemoveStagedStop(index) }) {
+                                        Icon(Icons.Default.Delete, contentDescription = strings.removeStop)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-                JourneyState.PAUSED -> {
-                    Button(onClick = onResumeJourney) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(strings.resumeMonitoring)
-                    }
-                    Button(
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                        onClick = onStopJourney
-                    ) {
-                        Icon(Icons.Default.Stop, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(strings.stopMonitoring)
-                    }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    enabled = stagedStops.isNotEmpty() && hasLocationPermission,
+                    onClick = { onStartMultiStopJourney(journeyTitleInput) },
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(strings.startMultiStopJourney)
                 }
-                JourneyState.ARRIVED -> {
-                    Button(onClick = onStopJourney) {
-                        Icon(Icons.Default.Stop, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(strings.stopMonitoring)
-                    }
-                }
-                else -> {}
             }
         }
     }
