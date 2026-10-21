@@ -12,6 +12,9 @@
     <!-- Notification permission for Android 13+ (API 33+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Vibration for arrival alarms -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <application
         android:name=".PingooApplication"
         android:allowBackup="true"
@@ -30,6 +33,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ui.alarm.AlarmActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.Pingoo" />
 
         <service
             android:name=".service.LocationTrackingService"

@@ -141,6 +141,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         trackingService?.resumeMonitoring()
     }
 
+    fun snoozeAlarm() {
+        trackingService?.snoozeAlarm()
+    }
+
+    fun dismissAlarm() {
+        trackingService?.dismissAlarm()
+    }
+
     fun stopJourney() {
         trackingService?.stopMonitoring()
     }

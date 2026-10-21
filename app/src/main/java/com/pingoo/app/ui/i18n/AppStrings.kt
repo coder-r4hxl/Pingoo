@@ -52,7 +52,12 @@ data class AppStrings(
     val vibrationSetting: String,
     val defaultRadiusSetting: String,
     val appVersion: String,
-    val phaseNotice: String
+    val phaseNotice: String,
+
+    val alarmArrivalHeader: String,
+    val alarmArrivedMessage: String,
+    val alarmSnoozeButton: String,
+    val alarmDismissButton: String
 )
 
 object Translations {
@@ -105,8 +110,13 @@ object Translations {
         selectLanguage = "Select Language",
         vibrationSetting = "Vibration Alert",
         defaultRadiusSetting = "Default Arrival Radius (Meters)",
-        appVersion = "Pingoo v1.0.0 (Phase 2)",
-        phaseNotice = "Phase 2 GPS Engine Active. Background tracking enabled with persistent notification."
+        appVersion = "Pingoo v1.0.0 (Phase 3)",
+        phaseNotice = "Phase 3 Alarm Engine Active. Full-screen arrival alert, ringtone, vibration, snooze and dismissal enabled.",
+
+        alarmArrivalHeader = "ARRIVED AT DESTINATION!",
+        alarmArrivedMessage = "You have reached your destination radius.",
+        alarmSnoozeButton = "Snooze (5 Mins)",
+        alarmDismissButton = "Dismiss Alarm"
     )
 
     val hindi = AppStrings(
@@ -158,8 +168,13 @@ object Translations {
         selectLanguage = "भाषा चुनें",
         vibrationSetting = "कंपन अलर्ट (Vibration)",
         defaultRadiusSetting = "डिफ़ॉल्ट पहुँच त्रिज्या (मीटर)",
-        appVersion = "पिंगू v1.0.0 (चरण 2)",
-        phaseNotice = "चरण 2 जीपीएस इंजन सक्रिय है। निरंतर अधिसूचना के साथ बैकग्राउंड ट्रैकिंग सक्षम है।"
+        appVersion = "पिंगू v1.0.0 (चरण 3)",
+        phaseNotice = "चरण 3 अलार्म इंजन सक्रिय है। फुल-स्क्रीन आगमन अलर्ट, रिंगटोन, कंपन, स्नूज़ और स्नूज़ बटन सक्षम हैं।",
+
+        alarmArrivalHeader = "गंतव्य पर पहुँच गए!",
+        alarmArrivedMessage = "आप अपने लक्ष्य गंतव्य की त्रिज्या में पहुँच चुके हैं।",
+        alarmSnoozeButton = "स्नूज़ करें (5 मिनट)",
+        alarmDismissButton = "अलार्म बंद करें"
     )
 
     fun get(language: Language): AppStrings = when (language) {

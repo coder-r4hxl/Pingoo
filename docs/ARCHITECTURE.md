@@ -6,15 +6,15 @@ Pingoo follows Clean Architecture and MVVM (Model-View-ViewModel) principles to 
 ```
 +-------------------------------------------------------------+
 |                      UI Layer                               |
-|   Compose Screens (Home, Destinations, Journey, History,    |
-|   Settings) + MainViewModel + AppStrings (i18n)              |
+|   Compose Screens + AlarmActivity (Full-Screen Alert Overlay)|
+|   MainViewModel + AppStrings (i18n)                         |
 +------------------------------+------------------------------+
                                |
                                v
 +-------------------------------------------------------------+
 |                     Domain Layer                            |
 |   Models (Destination, UserSettings, Language, GpsFix)      |
-|   State Engine (ArrivalStateMachine)                        |
+|   State Engine (ArrivalStateMachine, AlarmManagerEngine)    |
 |   Calculators (HaversineDistanceCalculator)                 |
 |   Utilities (DistanceFormatter)                             |
 +------------------------------+------------------------------+
@@ -22,21 +22,24 @@ Pingoo follows Clean Architecture and MVVM (Model-View-ViewModel) principles to 
                                v
 +-------------------------------------------------------------+
 |               Data & Service Layers                         |
-|   LocationTrackingService (Android Foreground Service)      |
+|   LocationTrackingService (Foreground Location Service)     |
+|   AlarmPlayer (Audio Ringtone & Vibration Engine)          |
 |   Room AppDatabase & DestinationDao                         |
 |   DataStore UserPreferencesRepository                       |
 +-------------------------------------------------------------+
 ```
 
-## Phase 2 Architecture: GPS Tracking & Arrival Engine
+## Phase 3 Architecture: Alarm Engine & Lock-Screen Overlay
 
-### 1. Domain Layer (`com.pingoo.app.domain`)
-- **ArrivalStateMachine:** Handles deterministic transitions across states (`IDLE`, `TRACKING`, `APPROACHING`, `ARRIVED`, `PAUSED`, `GPS_UNAVAILABLE`).
-- **Hysteresis & Filtering:** Rejects GPS fixes with accuracy worse than 100 meters or stale fixes (> 60 seconds). Includes a 20m hysteresis buffer at radius boundaries to prevent jitter.
-- **DistanceFormatter:** Formats distances in readable units (meters / km) with localized English and Hindi text.
+### 1. Alarm Player (`com.pingoo.app.service.alarm.AlarmPlayer`)
+- Manages audio playback using `RingtoneManager` configured with `USAGE_ALARM` audio attributes for high priority alert override.
+- Triggers repeating vibration patterns via `VibratorManager` (Android 12+) / `Vibrator`.
 
-### 2. Service Layer (`com.pingoo.app.service.LocationTrackingService`)
-- Android Foreground Service with `foregroundServiceType="location"`.
-- Displays a ongoing foreground notification with current journey state and live distance updates.
-- Registers location updates using `LocationManager` (GPS/Network providers).
-- Exposes `serviceEvaluation` `StateFlow` bound to `MainViewModel`.
+### 2. Alarm Suppression Engine (`com.pingoo.app.domain.engine.AlarmManagerEngine`)
+- Prevents duplicate arrival alarms across process restarts and GPS coordinate noise.
+- Supports 5-minute snooze timer suppression and full arrival acknowledgment.
+
+### 3. Lock-Screen Overlay (`com.pingoo.app.ui.alarm.AlarmActivity`)
+- Registered with `showWhenLocked="true"` and `turnScreenOn="true"`.
+- Displays prominent full-screen arrival UI with immediate Snooze and Dismiss actions in English and Hindi.
+- Explicitly marked as `exported="false"` for Android component security.

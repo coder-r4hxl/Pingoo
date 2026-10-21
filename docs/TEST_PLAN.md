@@ -5,35 +5,25 @@
 ### Executed Unit Tests
 Unit tests are executed via `./gradlew testDebugUnitTest`.
 
-1. **Haversine Distance Calculator (`HaversineDistanceCalculatorTest`):**
-   - Verified 0m distance for identical start/end points.
-   - Verified known distance calculation (New Delhi to Mumbai ~ 1,148 km).
-   - Verified short-distance accuracy (~111 meters).
-   - Verified extreme coordinates (Equator-to-Pole ~10,000 km, across International Date Line).
+1. **Alarm Manager Engine (`AlarmManagerEngineTest`):**
+   - Verified initial alert permission state.
+   - Verified alert suppression after arrival acknowledgment.
+   - Verified snooze duration suppression (alert suppressed during 5-minute window, allowed after expiry).
+   - Verified alert reset behavior.
 
 2. **Arrival State Machine (`ArrivalStateMachineTest`):**
-   - Verified IDLE -> TRACKING transition upon journey start.
-   - Verified progress from TRACKING -> APPROACHING (within warning radius) -> ARRIVED (within arrival radius).
+   - Verified IDLE -> TRACKING -> APPROACHING -> ARRIVED state transitions.
    - Verified zero distance and exact boundary arrivals.
    - Verified filtering of inaccurate GPS fixes (> 100m accuracy) and stale fixes (> 60s old).
-   - Verified PAUSED, RESUMED, STOPPED, and GPS_UNAVAILABLE state transitions.
-   - Verified handling of invalid coordinate bounds.
+   - Verified PAUSED, RESUMED, STOPPED, and GPS_UNAVAILABLE transitions.
 
-3. **Distance Formatter (`DistanceFormatterTest`):**
-   - Verified meter formatting ("450 m" / "450 मी.").
-   - Verified kilometer formatting ("12.4 km" / "12.4 कि.मी.").
-   - Verified accuracy formatting ("±15 m" / "±15 मी.").
-   - Verified null/negative/NaN fallback ("--").
+3. **Haversine Distance Calculator (`HaversineDistanceCalculatorTest`):**
+   - Verified 0m distance for identical coordinates.
+   - Verified known cross-country distance (Delhi to Mumbai ~1,148 km).
+   - Verified short distances (~111 m) and extreme/antipodal coordinates.
 
-4. **Destination Validation (`DomainUnitTests`):**
-   - Verified valid destination parameters.
-   - Verified error handling for empty names, out-of-bounds coordinates, and invalid radiuses.
-   - Verified language code resolution.
+4. **Distance Formatter (`DistanceFormatterTest`):**
+   - Verified meter / kilometer / accuracy formatting in English and Hindi.
 
-## Manual Real-Device Testing Checklist (Phase 2)
-- [ ] Grant location permissions on Android 12/13/14 device.
-- [ ] Start a journey and verify persistent foreground notification appears.
-- [ ] Move toward target destination and verify live distance updates on Journey screen and notification.
-- [ ] Toggle GPS off in Android quick settings and verify state changes to `GPS_UNAVAILABLE`.
-- [ ] Pause and resume journey tracking from UI.
-- [ ] Stop journey and verify service stops and notification is removed.
+5. **Destination Validation (`DomainUnitTests`):**
+   - Verified destination validation bounds and language code resolution.

@@ -17,12 +17,15 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.pingoo.app.MainActivity
+import com.pingoo.app.domain.engine.AlarmManagerEngine
 import com.pingoo.app.domain.engine.ArrivalStateMachine
 import com.pingoo.app.domain.engine.StateMachineEvaluation
 import com.pingoo.app.domain.model.Destination
 import com.pingoo.app.domain.model.GpsFix
 import com.pingoo.app.domain.model.JourneyState
 import com.pingoo.app.domain.util.DistanceFormatter
+import com.pingoo.app.service.alarm.AlarmPlayer
+import com.pingoo.app.ui.alarm.AlarmActivity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,6 +34,8 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
 
     private val binder = LocalBinder()
     private val stateMachine = ArrivalStateMachine()
+    private val alarmEngine = AlarmManagerEngine()
+    private lateinit var alarmPlayer: AlarmPlayer
 
     private val _serviceEvaluation = MutableStateFlow<StateMachineEvaluation>(
         StateMachineEvaluation(JourneyState.IDLE, null, "Tracking Service Idle")
@@ -47,13 +52,13 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
     override fun onCreate() {
         super.onCreate()
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        alarmPlayer = AlarmPlayer(this)
         createNotificationChannel()
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Ensure startForeground is called immediately to satisfy Android 8.0+ requirements
         val initialEval = stateMachine.lastFix?.let {
             stateMachine.processGpsFix(it)
         } ?: StateMachineEvaluation(stateMachine.state, stateMachine.lastDistance, "Tracking Service Active")
@@ -80,6 +85,8 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
             ACTION_STOP_SERVICE -> stopMonitoring()
             ACTION_PAUSE_SERVICE -> pauseMonitoring()
             ACTION_RESUME_SERVICE -> resumeMonitoring()
+            ACTION_SNOOZE_ALARM -> snoozeAlarm()
+            ACTION_DISMISS_ALARM -> dismissAlarm()
         }
         return START_STICKY
     }
@@ -96,6 +103,7 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
     fun pauseMonitoring() {
         val eval = stateMachine.pauseTracking()
         _serviceEvaluation.value = eval
+        alarmPlayer.stopAlarm()
         unregisterLocationUpdates()
         updateNotification(eval)
     }
@@ -107,6 +115,18 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
         updateNotification(eval)
     }
 
+    fun snoozeAlarm() {
+        val destId = stateMachine.destination?.id ?: 0L
+        alarmEngine.snoozeArrival(destId)
+        alarmPlayer.stopAlarm()
+    }
+
+    fun dismissAlarm() {
+        val destId = stateMachine.destination?.id ?: 0L
+        alarmEngine.acknowledgeArrival(destId)
+        alarmPlayer.stopAlarm()
+    }
+
     override fun startMonitoring() {
         // Fallback for contract
     }
@@ -115,6 +135,7 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
         val eval = stateMachine.stopTracking()
         _serviceEvaluation.value = eval
         isTrackingActive = false
+        alarmPlayer.stopAlarm()
         unregisterLocationUpdates()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -192,7 +213,25 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
         )
         val eval = stateMachine.processGpsFix(fix)
         _serviceEvaluation.value = eval
+
+        if (eval.state == JourneyState.ARRIVED) {
+            val destId = stateMachine.destination?.id ?: 0L
+            if (alarmEngine.isArrivalAlertAllowed(destId)) {
+                alarmPlayer.startAlarm(vibrate = stateMachine.destination?.vibrate ?: true)
+                launchAlarmActivity()
+            }
+        }
+
         updateNotification(eval)
+    }
+
+    private fun launchAlarmActivity() {
+        val destName = stateMachine.destination?.name ?: "Destination"
+        val alarmIntent = Intent(this, AlarmActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(AlarmActivity.EXTRA_DEST_NAME, destName)
+        }
+        startActivity(alarmIntent)
     }
 
     override fun onProviderEnabled(provider: String) {
@@ -265,6 +304,7 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
     }
 
     override fun onDestroy() {
+        alarmPlayer.stopAlarm()
         unregisterLocationUpdates()
         super.onDestroy()
     }
@@ -277,6 +317,8 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
         const val ACTION_STOP_SERVICE = "com.pingoo.app.STOP_SERVICE"
         const val ACTION_PAUSE_SERVICE = "com.pingoo.app.PAUSE_SERVICE"
         const val ACTION_RESUME_SERVICE = "com.pingoo.app.RESUME_SERVICE"
+        const val ACTION_SNOOZE_ALARM = "com.pingoo.app.SNOOZE_ALARM"
+        const val ACTION_DISMISS_ALARM = "com.pingoo.app.DISMISS_ALARM"
 
         const val EXTRA_DEST_NAME = "extra_dest_name"
         const val EXTRA_DEST_LAT = "extra_dest_lat"
