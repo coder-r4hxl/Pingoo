@@ -1,0 +1,28 @@
+# Kotlin / Java / Gradle build outputs
+*.class
+**/build/
+.gradle/
+build/
+
+# Android Studio / IntelliJ project files
+.idea/
+*.iml
+*.iws
+*.ipr
+.navigation/
+
+# Local configuration
+local.properties
+
+# Android / OS files
+.DS_Store
+Thumbs.db
+*.ap_
+*.apk
+*.aab
+
+# Key files / Secrets (safety rule)
+*.jks
+*.keystore
+*.pepk
+google-services.json
