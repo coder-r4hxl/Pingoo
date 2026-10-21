@@ -6,22 +6,26 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.pingoo.app.data.local.dao.DestinationDao
 import com.pingoo.app.data.local.dao.JourneyDao
+import com.pingoo.app.data.local.dao.JourneyHistoryDao
 import com.pingoo.app.data.local.entity.DestinationEntity
 import com.pingoo.app.data.local.entity.JourneyEntity
+import com.pingoo.app.data.local.entity.JourneyHistoryEntity
 import com.pingoo.app.data.local.entity.JourneyStopEntity
 
 @Database(
     entities = [
         DestinationEntity::class,
         JourneyEntity::class,
-        JourneyStopEntity::class
+        JourneyStopEntity::class,
+        JourneyHistoryEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun destinationDao(): DestinationDao
     abstract fun journeyDao(): JourneyDao
+    abstract fun journeyHistoryDao(): JourneyHistoryDao
 
     companion object {
         @Volatile

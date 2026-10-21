@@ -13,7 +13,7 @@ Pingoo follows Clean Architecture and MVVM (Model-View-ViewModel) principles to 
                                v
 +-------------------------------------------------------------+
 |                     Domain Layer                            |
-|   Models (Destination, MultiStopJourney, JourneyStop, GpsFix)|
+|   Models (Destination, MultiStopJourney, JourneyHistoryItem)|
 |   State Engines (MultiStopEngine, ArrivalStateMachine,      |
 |                  AlarmManagerEngine)                        |
 |   Calculators (HaversineDistanceCalculator)                 |
@@ -26,18 +26,17 @@ Pingoo follows Clean Architecture and MVVM (Model-View-ViewModel) principles to 
 |   LocationTrackingService (Foreground Service)              |
 |   OSMDroid Tile Engine (OpenStreetMap tile renderer)        |
 |   AlarmPlayer (Ringtone & Vibration Engine)                |
-|   Room AppDatabase (destinations, journeys, journey_stops)  |
+|   Room AppDatabase (destinations, journeys, history)        |
 |   DataStore UserPreferencesRepository                       |
 +-------------------------------------------------------------+
 ```
 
-## Phase 5 Architecture: Map & Geocoding Integration
+## Phase 6 Architecture: Journey History, Settings & Privacy Controls
 
-### 1. OSMDroid Map Renderer (`com.pingoo.app.ui.map.OsmMapView`)
-- Utilizes open-source `osmdroid-android:6.1.18` rendering engine with `TileSourceFactory.MAPNIK`.
-- Complies with OpenStreetMap tile usage guidelines by configuring user agent application ID (`com.pingoo.app`).
-- Enables single-tap coordinate pin placement (`MapEventsOverlay`) for visual destination selection.
+### 1. Room Database Schema v3 (`com.pingoo.app.data.local.AppDatabase`)
+- **`journey_history` table:** Stores completed and stopped journey summaries (`title`, `totalStops`, `reachedStops`, `isCompleted`, `durationSeconds`, `timestampMillis`).
+- Managed via `JourneyHistoryDao` with reactive Kotlin `Flow` queries and deletion operations.
 
-### 2. Reverse Geocoding (`com.pingoo.app.ui.map.GeocodingHelper`)
-- Asynchronously converts map latitude/longitude coordinates into human-readable address lines using Android's native `Geocoder`.
-- Features graceful offline fallback formatting raw coordinates `Coordinates (lat, lng)` if network or geocoding services are unavailable.
+### 2. Enhanced Preferences & Privacy Controls (`com.pingoo.app.data.datastore.UserPreferencesRepository`)
+- Persists user preferences for language (`en`/`hi`), vibration toggle, default arrival radius, and snooze duration (5, 10, or 15 minutes).
+- Privacy policy and local data deletion controls provided directly in `SettingsScreen`.

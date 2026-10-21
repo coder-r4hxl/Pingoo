@@ -22,6 +22,7 @@ class UserPreferencesRepository(private val context: Context) {
         val VIBRATION_ENABLED = booleanPreferencesKey("vibration_enabled")
         val DEFAULT_RADIUS = intPreferencesKey("default_radius_meters")
         val DEFAULT_ADVANCE_WARNING = intPreferencesKey("default_advance_warning_meters")
+        val SNOOZE_DURATION = intPreferencesKey("snooze_duration_minutes")
         val DARK_THEME = booleanPreferencesKey("dark_theme")
     }
 
@@ -32,6 +33,7 @@ class UserPreferencesRepository(private val context: Context) {
             isVibrationEnabled = preferences[Keys.VIBRATION_ENABLED] ?: true,
             defaultRadiusMeters = preferences[Keys.DEFAULT_RADIUS] ?: 500,
             defaultAdvanceWarningMeters = preferences[Keys.DEFAULT_ADVANCE_WARNING] ?: 2000,
+            snoozeDurationMinutes = preferences[Keys.SNOOZE_DURATION] ?: 5,
             darkTheme = preferences[Keys.DARK_THEME] ?: false
         )
     }
@@ -51,6 +53,12 @@ class UserPreferencesRepository(private val context: Context) {
     suspend fun setDefaultRadius(radiusMeters: Int) {
         context.dataStore.edit { preferences ->
             preferences[Keys.DEFAULT_RADIUS] = radiusMeters
+        }
+    }
+
+    suspend fun setSnoozeDuration(minutes: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[Keys.SNOOZE_DURATION] = minutes
         }
     }
 }

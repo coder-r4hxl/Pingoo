@@ -11,11 +11,13 @@ import androidx.lifecycle.viewModelScope
 import com.pingoo.app.data.datastore.UserPreferencesRepository
 import com.pingoo.app.data.local.AppDatabase
 import com.pingoo.app.data.local.entity.JourneyEntity
+import com.pingoo.app.data.local.entity.JourneyHistoryEntity
 import com.pingoo.app.data.local.entity.JourneyStopEntity
 import com.pingoo.app.data.repository.DestinationRepositoryImpl
 import com.pingoo.app.data.repository.SettingsRepositoryImpl
 import com.pingoo.app.domain.engine.MultiStopEvaluation
 import com.pingoo.app.domain.model.Destination
+import com.pingoo.app.domain.model.JourneyHistoryItem
 import com.pingoo.app.domain.model.JourneyState
 import com.pingoo.app.domain.model.JourneyStop
 import com.pingoo.app.domain.model.Language
@@ -39,6 +41,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val db = AppDatabase.getDatabase(application)
     private val destinationDao = db.destinationDao()
     private val journeyDao = db.journeyDao()
+    private val journeyHistoryDao = db.journeyHistoryDao()
 
     private val destinationRepository = DestinationRepositoryImpl(destinationDao)
     private val userPreferencesRepository = UserPreferencesRepository(application)
@@ -48,6 +51,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private var trackingService: LocationTrackingService? = null
     private var isServiceBound = false
+
+    private var currentJourneyStartTimeMillis: Long = 0L
 
     private val _selectedDestination = MutableStateFlow<Destination?>(null)
     val selectedDestination: StateFlow<Destination?> = _selectedDestination.asStateFlow()
@@ -84,6 +89,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
 
     val activeDestinations: StateFlow<List<Destination>> = destinationRepository.getActiveDestinations()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val journeyHistory: StateFlow<List<JourneyHistoryItem>> = journeyHistoryDao.getAllHistory()
+        .map { list ->
+            list.map { entity ->
+                JourneyHistoryItem(
+                    id = entity.id,
+                    title = entity.title,
+                    totalStops = entity.totalStops,
+                    reachedStops = entity.reachedStops,
+                    isCompleted = entity.isCompleted,
+                    durationSeconds = entity.durationSeconds,
+                    timestampMillis = entity.timestampMillis
+                )
+            }
+        }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -207,6 +232,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startMultiStopJourney(journey: MultiStopJourney) {
+        currentJourneyStartTimeMillis = System.currentTimeMillis()
         val context = getApplication<Application>()
         val intent = Intent(context, LocationTrackingService::class.java).apply {
             action = LocationTrackingService.ACTION_START_SERVICE
@@ -237,7 +263,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopJourney() {
+        val eval = _multiStopEvaluation.value
+        val durationSecs = if (currentJourneyStartTimeMillis > 0) {
+            (System.currentTimeMillis() - currentJourneyStartTimeMillis) / 1000L
+        } else 0L
+
+        if (eval.totalStops > 0) {
+            viewModelScope.launch {
+                journeyHistoryDao.insertHistory(
+                    JourneyHistoryEntity(
+                        title = eval.activeStop?.destination?.name ?: "Journey",
+                        totalStops = eval.totalStops,
+                        reachedStops = eval.activeStopIndex + if (eval.isJourneyCompleted) 1 else 0,
+                        isCompleted = eval.isJourneyCompleted,
+                        durationSeconds = durationSecs
+                    )
+                )
+            }
+        }
+
         trackingService?.stopMonitoring()
+        currentJourneyStartTimeMillis = 0L
+    }
+
+    fun deleteHistoryItem(item: JourneyHistoryItem) {
+        viewModelScope.launch {
+            journeyHistoryDao.deleteHistory(
+                JourneyHistoryEntity(
+                    id = item.id,
+                    title = item.title,
+                    totalStops = item.totalStops,
+                    reachedStops = item.reachedStops,
+                    isCompleted = item.isCompleted,
+                    durationSeconds = item.durationSeconds,
+                    timestampMillis = item.timestampMillis
+                )
+            )
+        }
+    }
+
+    fun clearAllHistory() {
+        viewModelScope.launch {
+            journeyHistoryDao.deleteAllHistory()
+        }
     }
 
     fun changeLanguage(language: Language) {
@@ -249,6 +317,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleVibration(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.updateVibrationEnabled(enabled)
+        }
+    }
+
+    fun setSnoozeDuration(minutes: Int) {
+        viewModelScope.launch {
+            userPreferencesRepository.setSnoozeDuration(minutes)
         }
     }
 

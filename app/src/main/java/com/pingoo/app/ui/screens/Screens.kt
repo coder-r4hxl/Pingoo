@@ -29,13 +29,18 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.pingoo.app.domain.engine.MultiStopEvaluation
 import com.pingoo.app.domain.model.Destination
+import com.pingoo.app.domain.model.JourneyHistoryItem
 import com.pingoo.app.domain.model.JourneyState
 import com.pingoo.app.domain.model.Language
+import com.pingoo.app.domain.model.UserSettings
 import com.pingoo.app.domain.usecase.ValidationResult
 import com.pingoo.app.domain.util.DistanceFormatter
 import com.pingoo.app.ui.i18n.AppStrings
 import com.pingoo.app.ui.map.GeocodingHelper
 import com.pingoo.app.ui.map.OsmMapView
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun HomeScreen(
@@ -667,19 +672,109 @@ fun JourneyScreen(
 }
 
 @Composable
-fun HistoryScreen(strings: AppStrings) {
+fun HistoryScreen(
+    strings: AppStrings,
+    historyItems: List<JourneyHistoryItem>,
+    onDeleteHistoryItem: (JourneyHistoryItem) -> Unit,
+    onClearAllHistory: () -> Unit
+) {
+    var showConfirmClearDialog by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Text(text = strings.historyTitle, style = MaterialTheme.typography.headlineMedium)
-        Spacer(modifier = Modifier.height(24.dp))
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = strings.noHistoryYet)
+            Text(text = strings.historyTitle, style = MaterialTheme.typography.headlineMedium)
+            if (historyItems.isNotEmpty()) {
+                TextButton(onClick = { showConfirmClearDialog = true }) {
+                    Text(strings.clearHistory, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (historyItems.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = strings.noHistoryYet)
+            }
+        } else {
+            val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
+
+            LazyColumn {
+                items(historyItems, key = { it.id }) { item ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = item.title,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Date: ${dateFormat.format(Date(item.timestampMillis))}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = "${strings.stopsReachedLabel}: ${item.reachedStops}/${item.totalStops}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = "${strings.durationLabel}: ${item.durationSeconds / 60}m ${item.durationSeconds % 60}s",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+
+                            IconButton(onClick = { onDeleteHistoryItem(item) }) {
+                                Icon(Icons.Default.Delete, contentDescription = strings.delete)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (showConfirmClearDialog) {
+            AlertDialog(
+                onDismissRequest = { showConfirmClearDialog = false },
+                title = { Text(strings.confirmDeleteHistoryTitle) },
+                text = { Text(strings.confirmDeleteHistoryMessage) },
+                confirmButton = {
+                    Button(
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        onClick = {
+                            onClearAllHistory()
+                            showConfirmClearDialog = false
+                        }
+                    ) {
+                        Text(strings.delete)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showConfirmClearDialog = false }) {
+                        Text(strings.cancel)
+                    }
+                }
+            )
         }
     }
 }
@@ -687,70 +782,163 @@ fun HistoryScreen(strings: AppStrings) {
 @Composable
 fun SettingsScreen(
     strings: AppStrings,
-    selectedLanguage: Language,
-    isVibrationEnabled: Boolean,
+    userSettings: UserSettings,
     onLanguageSelected: (Language) -> Unit,
-    onVibrationToggled: (Boolean) -> Unit
+    onVibrationToggled: (Boolean) -> Unit,
+    onSnoozeDurationSelected: (Int) -> Unit,
+    onClearAllData: () -> Unit
 ) {
-    Column(
+    var showClearDataDialog by remember { mutableStateOf(false) }
+
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Text(text = strings.settingsTitle, style = MaterialTheme.typography.headlineMedium)
-        Spacer(modifier = Modifier.height(16.dp))
+        item {
+            Text(text = strings.settingsTitle, style = MaterialTheme.typography.headlineMedium)
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(text = strings.languageSelection, style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(8.dp))
+            // Language Selection
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(text = strings.languageSelection, style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        FilterChip(
+                            selected = userSettings.language == Language.ENGLISH,
+                            onClick = { onLanguageSelected(Language.ENGLISH) },
+                            label = { Text("English") }
+                        )
+                        FilterChip(
+                            selected = userSettings.language == Language.HINDI,
+                            onClick = { onLanguageSelected(Language.HINDI) },
+                            label = { Text("हिन्दी (Hindi)") }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Snooze Duration Selector
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(text = strings.snoozeDurationSetting, style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        FilterChip(
+                            selected = userSettings.snoozeDurationMinutes == 5,
+                            onClick = { onSnoozeDurationSelected(5) },
+                            label = { Text("5 Mins") }
+                        )
+                        FilterChip(
+                            selected = userSettings.snoozeDurationMinutes == 10,
+                            onClick = { onSnoozeDurationSelected(10) },
+                            label = { Text("10 Mins") }
+                        )
+                        FilterChip(
+                            selected = userSettings.snoozeDurationMinutes == 15,
+                            onClick = { onSnoozeDurationSelected(15) },
+                            label = { Text("15 Mins") }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Vibration Toggle
+            Card(modifier = Modifier.fillMaxWidth()) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FilterChip(
-                        selected = selectedLanguage == Language.ENGLISH,
-                        onClick = { onLanguageSelected(Language.ENGLISH) },
-                        label = { Text("English") }
-                    )
-                    FilterChip(
-                        selected = selectedLanguage == Language.HINDI,
-                        onClick = { onLanguageSelected(Language.HINDI) },
-                        label = { Text("हिन्दी (Hindi)") }
+                    Text(text = strings.vibrationSetting, style = MaterialTheme.typography.titleMedium)
+                    Switch(
+                        checked = userSettings.isVibrationEnabled,
+                        onCheckedChange = onVibrationToggled
                     )
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            // Privacy & Data Policy Disclosure
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
-                Text(text = strings.vibrationSetting, style = MaterialTheme.typography.titleMedium)
-                Switch(
-                    checked = isVibrationEnabled,
-                    onCheckedChange = onVibrationToggled
-                )
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(text = strings.privacyPolicyHeader, style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = strings.privacyPolicyBody,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Destructive Clear Data Button
+            Button(
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                onClick = { showClearDataDialog = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Delete, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(strings.clearAllData)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // App Version Notice
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(text = strings.appVersion, style = MaterialTheme.typography.labelLarge)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = strings.phaseNotice, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
+    }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(text = strings.appVersion, style = MaterialTheme.typography.labelLarge)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(text = strings.phaseNotice, style = MaterialTheme.typography.bodySmall)
+    if (showClearDataDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDataDialog = false },
+            title = { Text(strings.confirmClearDataTitle) },
+            text = { Text(strings.confirmClearDataMessage) },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    onClick = {
+                        onClearAllData()
+                        showClearDataDialog = false
+                    }
+                ) {
+                    Text(strings.delete)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDataDialog = false }) {
+                    Text(strings.cancel)
+                }
             }
-        }
+        )
     }
 }

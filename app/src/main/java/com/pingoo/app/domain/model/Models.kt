@@ -29,7 +29,18 @@ data class UserSettings(
     val isVibrationEnabled: Boolean = true,
     val defaultRadiusMeters: Int = 500,
     val defaultAdvanceWarningMeters: Int = 2000,
+    val snoozeDurationMinutes: Int = 5,
     val darkTheme: Boolean = false
+)
+
+data class JourneyHistoryItem(
+    val id: Long = 0,
+    val title: String,
+    val totalStops: Int,
+    val reachedStops: Int,
+    val isCompleted: Boolean,
+    val durationSeconds: Long,
+    val timestampMillis: Long = System.currentTimeMillis()
 )
 
 data class JourneyStatus(

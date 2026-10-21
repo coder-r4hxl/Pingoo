@@ -86,6 +86,7 @@ fun MainAppScreen(
     val selectedDestination by viewModel.selectedDestination.collectAsState()
     val stagedStops by viewModel.stagedStops.collectAsState()
     val multiStopEvaluation by viewModel.multiStopEvaluation.collectAsState()
+    val journeyHistory by viewModel.journeyHistory.collectAsState()
 
     Scaffold(
         bottomBar = {
@@ -162,15 +163,21 @@ fun MainAppScreen(
                 )
             }
             composable(Screen.History.route) {
-                HistoryScreen(strings = strings)
+                HistoryScreen(
+                    strings = strings,
+                    historyItems = journeyHistory,
+                    onDeleteHistoryItem = { viewModel.deleteHistoryItem(it) },
+                    onClearAllHistory = { viewModel.clearAllHistory() }
+                )
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(
                     strings = strings,
-                    selectedLanguage = userSettings.language,
-                    isVibrationEnabled = userSettings.isVibrationEnabled,
+                    userSettings = userSettings,
                     onLanguageSelected = { viewModel.changeLanguage(it) },
-                    onVibrationToggled = { viewModel.toggleVibration(it) }
+                    onVibrationToggled = { viewModel.toggleVibration(it) },
+                    onSnoozeDurationSelected = { viewModel.setSnoozeDuration(it) },
+                    onClearAllData = { viewModel.clearAllHistory() }
                 )
             }
         }
