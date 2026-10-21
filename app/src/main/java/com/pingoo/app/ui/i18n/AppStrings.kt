@@ -54,6 +54,12 @@ data class AppStrings(
     val advanceToNextStop: String,
     val activeStopHeader: String,
 
+    val mapPickerTitle: String,
+    val tapMapToSelectPin: String,
+    val selectedCoordinates: String,
+    val useSelectedLocation: String,
+    val addressUnverifiedNotice: String,
+
     val historyTitle: String,
     val noHistoryYet: String,
 
@@ -124,6 +130,12 @@ object Translations {
         advanceToNextStop = "Advance to Next Stop",
         activeStopHeader = "Active Target Stop",
 
+        mapPickerTitle = "Select Destination on Map",
+        tapMapToSelectPin = "Tap anywhere on map or adjust pin:",
+        selectedCoordinates = "Selected Coordinates",
+        useSelectedLocation = "Use This Location",
+        addressUnverifiedNotice = "Address unverified (using raw GPS coordinates)",
+
         historyTitle = "Journey History",
         noHistoryYet = "No previous arrival history logged.",
 
@@ -132,8 +144,8 @@ object Translations {
         selectLanguage = "Select Language",
         vibrationSetting = "Vibration Alert",
         defaultRadiusSetting = "Default Arrival Radius (Meters)",
-        appVersion = "Pingoo v1.0.0 (Phase 4)",
-        phaseNotice = "Phase 4 Multi-Stop Engine Active. Ordered train/bus route tracking and automatic stop advancement enabled.",
+        appVersion = "Pingoo v1.0.0 (Phase 5)",
+        phaseNotice = "Phase 5 Map Engine Active. OSM map selection, pin placement, reverse geocoding, and offline coordinate fallback enabled.",
 
         alarmArrivalHeader = "ARRIVED AT STOP!",
         alarmArrivedMessage = "You have reached your destination radius.",
@@ -193,6 +205,12 @@ object Translations {
         advanceToNextStop = "अगले स्टॉप पर बढ़ें",
         activeStopHeader = "सक्रिय लक्ष्य स्टॉप",
 
+        mapPickerTitle = "मानचित्र पर गंतव्य चुनें",
+        tapMapToSelectPin = "मानचित्र पर कहीं भी टैप करें या पिन सेट करें:",
+        selectedCoordinates = "चयनित अक्षांश/रेखांश",
+        useSelectedLocation = "इस स्थान का उपयोग करें",
+        addressUnverifiedNotice = "पता असत्यापित (मूल जीपीएस निर्देशांक का उपयोग कर रहे हैं)",
+
         historyTitle = "यात्रा इतिहास",
         noHistoryYet = "कोई पिछला आगमन इतिहास नहीं दर्ज है।",
 
@@ -201,8 +219,8 @@ object Translations {
         selectLanguage = "भाषा चुनें",
         vibrationSetting = "कंपन अलर्ट (Vibration)",
         defaultRadiusSetting = "डिफ़ॉल्ट पहुँच त्रिज्या (मीटर)",
-        appVersion = "पिंगू v1.0.0 (चरण 4)",
-        phaseNotice = "चरण 4 मल्टी-स्टॉप इंजन सक्रिय है। ट्रेन/बस मार्ग ट्रैकिंग और स्वचालित स्टॉप प्रगति सक्षम है।",
+        appVersion = "पिंगू v1.0.0 (चरण 5)",
+        phaseNotice = "चरण 5 मैप इंजन सक्रिय है। ओएसएम मानचित्र चयन, पिन प्लेसमेंट, रिवर्स जियोकोडिंग और ऑफ़लाइन निर्देशांक फ़ॉलबैक सक्षम है।",
 
         alarmArrivalHeader = "स्टॉप पर पहुँच गए!",
         alarmArrivedMessage = "आप अपने लक्ष्य गंतव्य की त्रिज्या में पहुँच चुके हैं।",

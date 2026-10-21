@@ -6,7 +6,7 @@ Pingoo follows Clean Architecture and MVVM (Model-View-ViewModel) principles to 
 ```
 +-------------------------------------------------------------+
 |                      UI Layer                               |
-|   Compose Screens + Multi-Stop Builder + AlarmActivity     |
+|   Compose Screens + OsmMapView + GeocodingHelper            |
 |   MainViewModel + AppStrings (i18n)                         |
 +------------------------------+------------------------------+
                                |
@@ -24,20 +24,20 @@ Pingoo follows Clean Architecture and MVVM (Model-View-ViewModel) principles to 
 +-------------------------------------------------------------+
 |               Data & Service Layers                         |
 |   LocationTrackingService (Foreground Service)              |
+|   OSMDroid Tile Engine (OpenStreetMap tile renderer)        |
 |   AlarmPlayer (Ringtone & Vibration Engine)                |
 |   Room AppDatabase (destinations, journeys, journey_stops)  |
 |   DataStore UserPreferencesRepository                       |
 +-------------------------------------------------------------+
 ```
 
-## Phase 4 Architecture: Multi-Destination & Multi-Stop Journey System
+## Phase 5 Architecture: Map & Geocoding Integration
 
-### 1. MultiStopEngine (`com.pingoo.app.domain.engine.MultiStopEngine`)
-- Controls ordered multi-stop journeys (e.g. train or bus routes with consecutive stops).
-- Tracks distance and arrival state for the current active stop (`activeStopIndex`).
-- Automatically advances to the next stop when the user acknowledges arrival at the current stop.
-- Completes the journey upon acknowledging the final stop.
+### 1. OSMDroid Map Renderer (`com.pingoo.app.ui.map.OsmMapView`)
+- Utilizes open-source `osmdroid-android:6.1.18` rendering engine with `TileSourceFactory.MAPNIK`.
+- Complies with OpenStreetMap tile usage guidelines by configuring user agent application ID (`com.pingoo.app`).
+- Enables single-tap coordinate pin placement (`MapEventsOverlay`) for visual destination selection.
 
-### 2. Room Database Schema v2 (`com.pingoo.app.data.local.AppDatabase`)
-- **`journeys` table:** Stores journey metadata (`title`, `activeStopIndex`, `isCompleted`).
-- **`journey_stops` table:** Stores stop sequences linked via foreign key to `journeys` and `destinations`.
+### 2. Reverse Geocoding (`com.pingoo.app.ui.map.GeocodingHelper`)
+- Asynchronously converts map latitude/longitude coordinates into human-readable address lines using Android's native `Geocoder`.
+- Features graceful offline fallback formatting raw coordinates `Coordinates (lat, lng)` if network or geocoding services are unavailable.

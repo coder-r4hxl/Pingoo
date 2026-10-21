@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -33,6 +34,8 @@ import com.pingoo.app.domain.model.Language
 import com.pingoo.app.domain.usecase.ValidationResult
 import com.pingoo.app.domain.util.DistanceFormatter
 import com.pingoo.app.ui.i18n.AppStrings
+import com.pingoo.app.ui.map.GeocodingHelper
+import com.pingoo.app.ui.map.OsmMapView
 
 @Composable
 fun HomeScreen(
@@ -136,20 +139,38 @@ fun HomeScreen(
 fun DestinationsScreen(
     strings: AppStrings,
     destinations: List<Destination>,
+    language: Language,
     onAddDestination: (String, String, String, String, (ValidationResult) -> Unit) -> Unit,
     onDeleteDestination: (Destination) -> Unit,
     onToggleDestination: (Destination) -> Unit
 ) {
-    var showDialog by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var showMapPicker by remember { mutableStateOf(false) }
+
     var name by remember { mutableStateOf("") }
-    var lat by remember { mutableStateOf("") }
-    var lng by remember { mutableStateOf("") }
+    var lat by remember { mutableStateOf("28.6139") }
+    var lng by remember { mutableStateOf("77.2090") }
     var radius by remember { mutableStateOf("500") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
+    val context = LocalContext.current
+    var geocodedAddressText by remember { mutableStateOf("") }
+
+    LaunchedEffect(lat, lng) {
+        val latVal = lat.toDoubleOrNull()
+        val lngVal = lng.toDoubleOrNull()
+        if (latVal != null && lngVal != null) {
+            val result = GeocodingHelper.reverseGeocode(context, latVal, lngVal, language)
+            geocodedAddressText = result.addressText
+            if (name.isBlank() && result.isVerified) {
+                name = result.addressText
+            }
+        }
+    }
+
     Scaffold(
         floatingActionButton = {
-            FloatingActionButton(onClick = { showDialog = true }) {
+            FloatingActionButton(onClick = { showAddDialog = true }) {
                 Icon(Icons.Default.Add, contentDescription = strings.addDestination)
             }
         }
@@ -206,10 +227,10 @@ fun DestinationsScreen(
             }
         }
 
-        if (showDialog) {
+        if (showAddDialog) {
             AlertDialog(
                 onDismissRequest = {
-                    showDialog = false
+                    showAddDialog = false
                     errorMessage = null
                 },
                 title = { Text(strings.addDestination) },
@@ -222,26 +243,54 @@ fun DestinationsScreen(
                             singleLine = true
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = lat,
-                            onValueChange = { lat = it },
-                            label = { Text(strings.latitude) },
-                            singleLine = true
-                        )
+
+                        OutlinedButton(
+                            onClick = { showMapPicker = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Map, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(strings.mapPickerTitle)
+                        }
+
                         Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = lng,
-                            onValueChange = { lng = it },
-                            label = { Text(strings.longitude) },
-                            singleLine = true
-                        )
+
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = lat,
+                                onValueChange = { lat = it },
+                                label = { Text(strings.latitude) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            OutlinedTextField(
+                                value = lng,
+                                onValueChange = { lng = it },
+                                label = { Text(strings.longitude) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
                         Spacer(modifier = Modifier.height(8.dp))
+
                         OutlinedTextField(
                             value = radius,
                             onValueChange = { radius = it },
                             label = { Text(strings.arrivalRadius) },
                             singleLine = true
                         )
+
+                        if (geocodedAddressText.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Address: $geocodedAddressText",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
                         errorMessage?.let { error ->
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(text = error, color = MaterialTheme.colorScheme.error)
@@ -254,10 +303,8 @@ fun DestinationsScreen(
                             onAddDestination(name, lat, lng, radius) { result ->
                                 when (result) {
                                     is ValidationResult.Success -> {
-                                        showDialog = false
+                                        showAddDialog = false
                                         name = ""
-                                        lat = ""
-                                        lng = ""
                                         errorMessage = null
                                     }
                                     is ValidationResult.Error -> {
@@ -271,8 +318,39 @@ fun DestinationsScreen(
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showDialog = false }) {
+                    TextButton(onClick = { showAddDialog = false }) {
                         Text(strings.cancel)
+                    }
+                }
+            )
+        }
+
+        if (showMapPicker) {
+            AlertDialog(
+                onDismissRequest = { showMapPicker = false },
+                title = { Text(strings.mapPickerTitle) },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth().height(320.dp)) {
+                        Text(
+                            text = strings.tapMapToSelectPin,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OsmMapView(
+                            selectedLatitude = lat.toDoubleOrNull() ?: 28.6139,
+                            selectedLongitude = lng.toDoubleOrNull() ?: 77.2090,
+                            onLocationSelected = { newLat, newLng ->
+                                lat = String.format("%.4f", newLat)
+                                lng = String.format("%.4f", newLng)
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = { showMapPicker = false }) {
+                        Text(strings.useSelectedLocation)
                     }
                 }
             )
@@ -294,7 +372,6 @@ fun JourneyScreen(
     onRemoveStagedStop: (Int) -> Unit,
     onMoveStagedStopUp: (Int) -> Unit,
     onMoveStagedStopDown: (Int) -> Unit,
-    onStartSingleJourney: (Destination) -> Unit,
     onStartMultiStopJourney: (String) -> Unit,
     onPauseJourney: () -> Unit,
     onResumeJourney: () -> Unit,
@@ -359,7 +436,6 @@ fun JourneyScreen(
             Spacer(modifier = Modifier.height(12.dp))
         }
 
-        // Active Journey Card (if active)
         if (evaluation.journeyState != JourneyState.IDLE) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -412,7 +488,6 @@ fun JourneyScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Control Buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
@@ -467,7 +542,6 @@ fun JourneyScreen(
                 }
             }
         } else {
-            // Idle State: Multi-Stop Route Builder UI
             Text(text = strings.multiStopTitle, style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
 

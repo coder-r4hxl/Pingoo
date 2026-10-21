@@ -133,6 +133,7 @@ fun MainAppScreen(
                 DestinationsScreen(
                     strings = strings,
                     destinations = destinations,
+                    language = userSettings.language,
                     onAddDestination = { name, lat, lng, radius, callback ->
                         viewModel.addDestination(name, lat, lng, radius, callback)
                     },
@@ -153,7 +154,6 @@ fun MainAppScreen(
                     onRemoveStagedStop = { viewModel.removeStagedStop(it) },
                     onMoveStagedStopUp = { viewModel.moveStagedStopUp(it) },
                     onMoveStagedStopDown = { viewModel.moveStagedStopDown(it) },
-                    onStartSingleJourney = { viewModel.startSingleDestinationJourney(it) },
                     onStartMultiStopJourney = { viewModel.startStagedMultiStopJourney(it) },
                     onPauseJourney = { viewModel.pauseJourney() },
                     onResumeJourney = { viewModel.resumeJourney() },

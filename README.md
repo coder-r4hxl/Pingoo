@@ -10,6 +10,7 @@ Pingoo is a native Android GPS-based multi-destination alarm and travel companio
 
 - **Language:** Kotlin
 - **UI Framework:** Jetpack Compose + Material 3
+- **Map View:** OSMDroid (`osmdroid-android:6.1.18` - OpenStreetMap free tile rendering)
 - **Architecture:** MVVM / Clean Architecture (UI, Domain, Data, Service layers)
 - **Multi-Stop Engine:** Deterministic `MultiStopEngine` for ordered train/bus routes
 - **Background Engine:** Android Foreground Service with `foregroundServiceType="location"`
