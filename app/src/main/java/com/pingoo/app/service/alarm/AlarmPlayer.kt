@@ -71,7 +71,7 @@ class AlarmPlayer(private val context: Context) {
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-                vibratorManager.cancel()
+                vibratorManager.defaultVibrator.cancel()
             } else {
                 @Suppress("DEPRECATION")
                 val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator

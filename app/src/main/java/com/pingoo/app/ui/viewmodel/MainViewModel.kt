@@ -51,6 +51,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private var trackingService: LocationTrackingService? = null
     private var isServiceBound = false
+    private var pendingJourneyToStart: MultiStopJourney? = null
 
     private var currentJourneyStartTimeMillis: Long = 0L
 
@@ -126,6 +127,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     service.multiStopEvaluation.collect { eval ->
                         _multiStopEvaluation.value = eval
                     }
+                }
+
+                pendingJourneyToStart?.let { pendingJourney ->
+                    service.startMultiStopJourney(pendingJourney)
+                    pendingJourneyToStart = null
                 }
             }
         }
@@ -242,6 +248,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (isServiceBound && trackingService != null) {
             trackingService?.startMultiStopJourney(journey)
         } else {
+            pendingJourneyToStart = journey
             bindTrackingService()
         }
     }
