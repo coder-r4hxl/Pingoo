@@ -1,43 +1,38 @@
 # Pingoo Phase Status
 
-## Phase 1 Status: COMPLETED & VERIFIED
+## Phase 2 Status: COMPLETED & VERIFIED
 
-### Phase 1 Verification Results
+### Phase 2 Verification Results
 - **Branch:** `jules-5729214828968460585-40c09ca2`
-- **Base Commit SHA:** `2d0fa1d11bb2268ba5db78a49b5b396edfecd00b`
 - **Build Status:**
-  - `./gradlew testDebugUnitTest`: PASS (All unit tests passed)
+  - `./gradlew testDebugUnitTest`: PASS (All unit test suites passed: `ArrivalStateMachineTest`, `DistanceFormatterTest`, `HaversineDistanceCalculatorTest`, `DomainUnitTests`)
   - `./gradlew lintDebug`: PASS (No lint errors)
   - `./gradlew assembleDebug`: PASS
-- **APK Verification:** `app/build/outputs/apk/debug/app-debug.apk` generated (Exact size: `16,594,895` bytes).
-- **Unit Testing:**
-  - `HaversineDistanceCalculatorTest`: Tested zero distance, short distances, cross-country distance (Delhi to Mumbai), and antipodal/extreme coordinates (Equator-to-Pole, International Date Line).
-  - `DomainUnitTests`: Tested coordinate bounds (-90..90 lat, -180..180 lng), empty name validation, radius constraints, and language code resolution.
-- **Persistence Verification:**
-  - Room DB (`AppDatabase` v1): Fully functional `DestinationDao` with reactive `Flow` queries (`getAllDestinations`, `getActiveDestinations`) and CRUD methods.
-  - DataStore (`UserPreferencesRepository`): Working preferences store for language, vibration state, default radius, and dark theme.
-- **CI Workflow:** `.github/workflows/android.yml` created for automated JDK 17 build and testing.
-- **Permissions & Security Audit:**
-  - Only `ACCESS_FINE_LOCATION` and `ACCESS_COARSE_LOCATION` declared in `AndroidManifest.xml`.
-  - Zero hardcoded secrets, API keys, tracking SDKs, or SMS/camera permissions.
+- **APK Verification:** `app/build/outputs/apk/debug/app-debug.apk` generated (Exact size: `16,655,407` bytes / ~15.9 MB).
 
 ---
 
-### Phase Gate Checklist
+### Phase 2 Gate Checklist
 
 | Requirement | Status | Evidence / Notes |
 |---|---|---|
-| Native Android & Compose Project Setup | PASS | Gradle 8.8, AGP 8.3.2, Kotlin 1.9.23, Compose Material 3 |
-| English / Hindi UI | PASS | Runtime language toggle, stored in DataStore |
-| Clean MVVM Architecture | PASS | UI, Domain, Data, and Service contract layers strictly separated |
-| Working Room Persistence | PASS | `AppDatabase`, `DestinationEntity`, `DestinationDao` implemented |
-| Working DataStore Persistence | PASS | `UserPreferencesRepository` implemented |
-| Unit Tests & Geodesic Calculations | PASS | `HaversineDistanceCalculatorTest` and `DomainUnitTests` passing |
-| Debug APK Generation | PASS | `app/build/outputs/apk/debug/app-debug.apk` (16.59 MB) |
-| GitHub Actions Workflow | PASS | `.github/workflows/android.yml` created |
-| Documentation | PASS | `README.md`, `ARCHITECTURE.md`, `PERMISSIONS_AND_PRIVACY.md`, `TEST_PLAN.md` |
+| Location Engine & GPS Provider | PASS | Android `LocationManager` integration with fine/coarse permission handling |
+| Haversine Distance Calculation | PASS | Reused `HaversineDistanceCalculator` with unit tests for zero, short, long, and extreme coordinates |
+| Arrival State Machine | PASS | `ArrivalStateMachine` with explicit states (`IDLE`, `TRACKING`, `APPROACHING`, `ARRIVED`, `PAUSED`, `GPS_UNAVAILABLE`), accuracy filtering, staleness check, and hysteresis |
+| Distance & Unit Formatting | PASS | `DistanceFormatter` formatting meters / km in English and Hindi |
+| Journey UI Integration | PASS | Jetpack Compose `JourneyScreen` with target destination picker, live status card, permission request launcher, and controls (Start/Pause/Resume/Stop) |
+| Foreground Tracking Service | PASS | `LocationTrackingService` registered with `foregroundServiceType="location"`, ongoing notification, and clean lifecycle release |
+| Persistence & Privacy | PASS | Room DB / DataStore reused; location fixes not continuously saved to disk or uploaded |
+| Automated Unit Tests | PASS | 100% passing unit tests in `ArrivalStateMachineTest`, `DistanceFormatterTest`, `HaversineDistanceCalculatorTest`, `DomainUnitTests` |
+| Documentation | PASS | Updated `README.md`, `docs/ARCHITECTURE.md`, `docs/TEST_PLAN.md`, `docs/PERMISSIONS_AND_PRIVACY.md`, `docs/PHASE_STATUS.md` |
+
+---
+
+### Known Limitations & Device Restrictions
+1. **OEM Battery Optimizations:** Heavy vendor customizations (e.g., Xiaomi MIUI, Samsung OneUI) may throttle background location updates if battery optimization is strictly enforced by the user.
+2. **GPS Fix Warm-up:** Cold GPS startup indoors may take 10-30 seconds to acquire initial fine fix accuracy (< 100m).
 
 ---
 
 ### Next Steps
-Wait for user review before proceeding to **Phase 2** (Location Foreground Service & GPS Monitoring).
+Wait for user review before proceeding to **Phase 3** (Alarm Playback Engine: looping audio, vibration patterns, snooze/dismissal, and full-screen alarm overlay).

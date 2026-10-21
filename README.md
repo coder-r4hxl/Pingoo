@@ -11,6 +11,8 @@ Pingoo is a native Android GPS-based multi-destination alarm and travel companio
 - **Language:** Kotlin
 - **UI Framework:** Jetpack Compose + Material 3
 - **Architecture:** MVVM / Clean Architecture (UI, Domain, Data, Service layers)
+- **State Machine:** Deterministic `ArrivalStateMachine` (`IDLE`, `TRACKING`, `APPROACHING`, `ARRIVED`, `PAUSED`, `GPS_UNAVAILABLE`)
+- **Background Engine:** Android Foreground Service with `foregroundServiceType="location"`
 - **Database:** Room Database (Offline local storage)
 - **Preferences:** Jetpack DataStore Preferences
 - **Asynchrony:** Kotlin Coroutines & StateFlow
@@ -29,11 +31,12 @@ com.pingoo.app/
 │   ├── local/                # Room database, DAO, entities
 │   └── repository/           # Repository implementations
 ├── domain/
-│   ├── model/                # Core domain entities (Destination, Settings, Language)
+│   ├── engine/               # ArrivalStateMachine for journey tracking
+│   ├── model/                # Core domain entities (Destination, Settings, Language, GpsFix)
 │   ├── repository/           # Repository interfaces
 │   ├── usecase/              # Business validation use cases
-│   └── util/                 # Haversine distance calculator
-├── service/                  # Location monitoring service contract (Phase 2 boundary)
+│   └── util/                 # Haversine distance calculator & DistanceFormatter
+├── service/                  # LocationTrackingService (Foreground location service)
 ├── ui/
 │   ├── i18n/                 # AppStrings and English/Hindi translations
 │   ├── navigation/           # Screen routing

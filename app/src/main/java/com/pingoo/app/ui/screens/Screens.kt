@@ -1,20 +1,33 @@
 package com.pingoo.app.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import com.pingoo.app.domain.engine.StateMachineEvaluation
 import com.pingoo.app.domain.model.Destination
+import com.pingoo.app.domain.model.JourneyState
 import com.pingoo.app.domain.model.Language
 import com.pingoo.app.domain.usecase.ValidationResult
+import com.pingoo.app.domain.util.DistanceFormatter
 import com.pingoo.app.ui.i18n.AppStrings
 
 @Composable
@@ -263,28 +276,218 @@ fun DestinationsScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun JourneyScreen(strings: AppStrings) {
+fun JourneyScreen(
+    strings: AppStrings,
+    destinations: List<Destination>,
+    selectedDestination: Destination?,
+    evaluation: StateMachineEvaluation,
+    language: Language,
+    onSelectDestination: (Destination) -> Unit,
+    onStartJourney: (Destination) -> Unit,
+    onPauseJourney: () -> Unit,
+    onResumeJourney: () -> Unit,
+    onStopJourney: () -> Unit
+) {
+    val context = LocalContext.current
+    var hasLocationPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        hasLocationPermission = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+    }
+
+    var dropdownExpanded by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .padding(16.dp)
     ) {
-        Icon(
-            imageVector = Icons.Default.Notifications,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.primary
-        )
-        Spacer(modifier = Modifier.height(16.dp))
         Text(text = strings.journeyTitle, style = MaterialTheme.typography.headlineMedium)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(text = strings.liveGpsStatus, style = MaterialTheme.typography.bodyLarge)
         Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = { /* Placeholder action for Phase 2 */ }) {
-            Text(strings.startMonitoring)
+
+        if (!hasLocationPermission) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = strings.permissionRequiredNotice,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            val perms = mutableListOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
+                            )
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                perms.add(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                            permissionLauncher.launch(perms.toTypedArray())
+                        }
+                    ) {
+                        Text(strings.grantPermissions)
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Target Destination Selection
+        Text(text = strings.selectDestinationPrompt, style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+
+        ExposedDropdownMenuBox(
+            expanded = dropdownExpanded,
+            onExpandedChange = { dropdownExpanded = !dropdownExpanded }
+        ) {
+            OutlinedTextField(
+                value = selectedDestination?.name ?: "Select Destination",
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded) },
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth()
+            )
+            ExposedDropdownMenu(
+                expanded = dropdownExpanded,
+                onDismissRequest = { dropdownExpanded = false }
+            ) {
+                destinations.forEach { dest ->
+                    DropdownMenuItem(
+                        text = { Text(dest.name) },
+                        onClick = {
+                            onSelectDestination(dest)
+                            dropdownExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Live Tracker Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = when (evaluation.state) {
+                    JourneyState.ARRIVED -> MaterialTheme.colorScheme.secondaryContainer
+                    JourneyState.APPROACHING -> MaterialTheme.colorScheme.tertiaryContainer
+                    else -> MaterialTheme.colorScheme.surfaceVariant
+                }
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${strings.journeyStateLabel}: ${evaluation.state.name}",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Icon(
+                        imageVector = Icons.Default.Navigation,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "${strings.distanceToDestination}: ${DistanceFormatter.formatDistance(evaluation.distanceMeters, language)}",
+                    style = MaterialTheme.typography.headlineSmall
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Status: ${evaluation.statusMessage}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+
+                selectedDestination?.let { dest ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "${strings.arrivalRadiusLabel}: ${dest.arrivalRadiusMeters}m • Target: (${dest.latitude}, ${dest.longitude})",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Action Controls
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            when (evaluation.state) {
+                JourneyState.IDLE -> {
+                    Button(
+                        enabled = selectedDestination != null && hasLocationPermission,
+                        onClick = { selectedDestination?.let { onStartJourney(it) } }
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(strings.startMonitoring)
+                    }
+                }
+                JourneyState.TRACKING, JourneyState.APPROACHING, JourneyState.GPS_UNAVAILABLE -> {
+                    Button(onClick = onPauseJourney) {
+                        Icon(Icons.Default.Pause, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(strings.pauseMonitoring)
+                    }
+                    Button(
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        onClick = onStopJourney
+                    ) {
+                        Icon(Icons.Default.Stop, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(strings.stopMonitoring)
+                    }
+                }
+                JourneyState.PAUSED -> {
+                    Button(onClick = onResumeJourney) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(strings.resumeMonitoring)
+                    }
+                    Button(
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        onClick = onStopJourney
+                    ) {
+                        Icon(Icons.Default.Stop, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(strings.stopMonitoring)
+                    }
+                }
+                JourneyState.ARRIVED -> {
+                    Button(onClick = onStopJourney) {
+                        Icon(Icons.Default.Stop, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(strings.stopMonitoring)
+                    }
+                }
+                else -> {}
+            }
         }
     }
 }

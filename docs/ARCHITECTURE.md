@@ -13,38 +13,30 @@ Pingoo follows Clean Architecture and MVVM (Model-View-ViewModel) principles to 
                                v
 +-------------------------------------------------------------+
 |                     Domain Layer                            |
-|   Models (Destination, UserSettings, Language)              |
-|   Use Cases (ValidateDestinationUseCase)                    |
+|   Models (Destination, UserSettings, Language, GpsFix)      |
+|   State Engine (ArrivalStateMachine)                        |
 |   Calculators (HaversineDistanceCalculator)                 |
-|   Repository Contracts                                      |
+|   Utilities (DistanceFormatter)                             |
 +------------------------------+------------------------------+
                                |
                                v
 +-------------------------------------------------------------+
-|                      Data Layer                             |
+|               Data & Service Layers                         |
+|   LocationTrackingService (Android Foreground Service)      |
 |   Room AppDatabase & DestinationDao                         |
 |   DataStore UserPreferencesRepository                       |
-|   Repository Implementations                                |
 +-------------------------------------------------------------+
 ```
 
-## Layers
+## Phase 2 Architecture: GPS Tracking & Arrival Engine
 
 ### 1. Domain Layer (`com.pingoo.app.domain`)
-- Independent of Android framework classes.
-- Pure Kotlin business logic and models.
-- Contains `HaversineDistanceCalculator` for offline geodesic distance computation.
-- Contains validation rules (`ValidateDestinationUseCase`).
+- **ArrivalStateMachine:** Handles deterministic transitions across states (`IDLE`, `TRACKING`, `APPROACHING`, `ARRIVED`, `PAUSED`, `GPS_UNAVAILABLE`).
+- **Hysteresis & Filtering:** Rejects GPS fixes with accuracy worse than 100 meters or stale fixes (> 60 seconds). Includes a 20m hysteresis buffer at radius boundaries to prevent jitter.
+- **DistanceFormatter:** Formats distances in readable units (meters / km) with localized English and Hindi text.
 
-### 2. Data Layer (`com.pingoo.app.data`)
-- Implements persistence using Room DB for destinations (`destinations` table).
-- Implements preference storage via Jetpack DataStore Preferences (`user_settings`).
-- Exposes Kotlin Flows to provide continuous reactive state updates.
-
-### 3. UI Layer (`com.pingoo.app.ui`)
-- Fully built with Jetpack Compose and Material 3.
-- `MainViewModel` manages screen states and bridges domain/data to composables.
-- Supports runtime language switching between English and Hindi (`AppStrings`).
-
-### 4. Service Layer Contract (`com.pingoo.app.service`)
-- `LocationServiceContract` defines the contract for Phase 2 background foreground location tracking service.
+### 2. Service Layer (`com.pingoo.app.service.LocationTrackingService`)
+- Android Foreground Service with `foregroundServiceType="location"`.
+- Displays a ongoing foreground notification with current journey state and live distance updates.
+- Registers location updates using `LocationManager` (GPS/Network providers).
+- Exposes `serviceEvaluation` `StateFlow` bound to `MainViewModel`.

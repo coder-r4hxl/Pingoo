@@ -34,6 +34,14 @@ data class AppStrings(
     val distanceToDestination: String,
     val startMonitoring: String,
     val stopMonitoring: String,
+    val pauseMonitoring: String,
+    val resumeMonitoring: String,
+    val selectDestinationPrompt: String,
+    val permissionRequiredNotice: String,
+    val grantPermissions: String,
+    val gpsAccuracyLabel: String,
+    val arrivalRadiusLabel: String,
+    val journeyStateLabel: String,
 
     val historyTitle: String,
     val noHistoryYet: String,
@@ -62,7 +70,7 @@ object Translations {
         noActiveAlarms = "No active alarms configured. Add a destination to get started.",
         quickAddDestination = "+ Add Destination",
         currentStatus = "Journey Status",
-        statusIdle = "Monitoring Idle (Phase 1 Foundation)",
+        statusIdle = "Monitoring Idle",
 
         destinationsTitle = "My Destinations",
         addDestination = "Add New Destination",
@@ -76,10 +84,18 @@ object Translations {
         noDestinationsYet = "No destinations saved yet.",
 
         journeyTitle = "Live Journey Tracker",
-        liveGpsStatus = "GPS Status: Waiting for active service (Phase 2 feature)",
-        distanceToDestination = "Distance: --",
-        startMonitoring = "Start GPS Monitoring",
-        stopMonitoring = "Stop GPS Monitoring",
+        liveGpsStatus = "GPS Status",
+        distanceToDestination = "Distance Remaining",
+        startMonitoring = "Start Journey Tracking",
+        stopMonitoring = "Stop Journey Tracking",
+        pauseMonitoring = "Pause",
+        resumeMonitoring = "Resume",
+        selectDestinationPrompt = "Select target destination:",
+        permissionRequiredNotice = "Location permission is required to calculate live distance and trigger destination alerts in background.",
+        grantPermissions = "Grant Location Permission",
+        gpsAccuracyLabel = "GPS Accuracy",
+        arrivalRadiusLabel = "Arrival Radius",
+        journeyStateLabel = "State",
 
         historyTitle = "Journey History",
         noHistoryYet = "No previous arrival history logged.",
@@ -89,8 +105,8 @@ object Translations {
         selectLanguage = "Select Language",
         vibrationSetting = "Vibration Alert",
         defaultRadiusSetting = "Default Arrival Radius (Meters)",
-        appVersion = "Pingoo v1.0.0 (Phase 1)",
-        phaseNotice = "Phase 1 Foundation Active. GPS tracking and background audio alarms will be enabled in Phase 2."
+        appVersion = "Pingoo v1.0.0 (Phase 2)",
+        phaseNotice = "Phase 2 GPS Engine Active. Background tracking enabled with persistent notification."
     )
 
     val hindi = AppStrings(
@@ -107,7 +123,7 @@ object Translations {
         noActiveAlarms = "कोई सक्रिय अलार्म सेट नहीं है। शुरू करने के लिए गंतव्य जोड़ें।",
         quickAddDestination = "+ गंतव्य जोड़ें",
         currentStatus = "यात्रा स्थिति",
-        statusIdle = "निगरानी निष्क्रिय (चरण 1 आधार)",
+        statusIdle = "निगरानी निष्क्रिय",
 
         destinationsTitle = "मेरे गंतव्य",
         addDestination = "नया गंतव्य जोड़ें",
@@ -121,10 +137,18 @@ object Translations {
         noDestinationsYet = "अभी तक कोई गंतव्य सहेजा नहीं गया है।",
 
         journeyTitle = "लाइव यात्रा ट्रैकर",
-        liveGpsStatus = "जीपीएस स्थिति: सक्रिय सेवा की प्रतीक्षा है (चरण 2 सुविधा)",
-        distanceToDestination = "दूरी: --",
-        startMonitoring = "जीपीएस निगरानी शुरू करें",
-        stopMonitoring = "जीपीएस निगरानी रोकें",
+        liveGpsStatus = "जीपीएस स्थिति",
+        distanceToDestination = "शेष दूरी",
+        startMonitoring = "यात्रा ट्रैकिंग शुरू करें",
+        stopMonitoring = "यात्रा ट्रैकिंग रोकें",
+        pauseMonitoring = "विराम (Pause)",
+        resumeMonitoring = "पुनः प्रारंभ (Resume)",
+        selectDestinationPrompt = "लक्ष्य गंतव्य चुनें:",
+        permissionRequiredNotice = "लाइव दूरी की गणना करने और बैकग्राउंड में अलर्ट ट्रिगर करने के लिए स्थान अनुमति आवश्यक है।",
+        grantPermissions = "स्थान अनुमति दें",
+        gpsAccuracyLabel = "जीपीएस सटीकता",
+        arrivalRadiusLabel = "पहुँच त्रिज्या",
+        journeyStateLabel = "स्थिति",
 
         historyTitle = "यात्रा इतिहास",
         noHistoryYet = "कोई पिछला आगमन इतिहास नहीं दर्ज है।",
@@ -134,8 +158,8 @@ object Translations {
         selectLanguage = "भाषा चुनें",
         vibrationSetting = "कंपन अलर्ट (Vibration)",
         defaultRadiusSetting = "डिफ़ॉल्ट पहुँच त्रिज्या (मीटर)",
-        appVersion = "पिंगू v1.0.0 (चरण 1)",
-        phaseNotice = "चरण 1 आधार सक्रिय है। जीपीएस ट्रैकिंग और बैकग्राउंड ऑडियो अलार्म चरण 2 में सक्षम किए जाएंगे।"
+        appVersion = "पिंगू v1.0.0 (चरण 2)",
+        phaseNotice = "चरण 2 जीपीएस इंजन सक्रिय है। निरंतर अधिसूचना के साथ बैकग्राउंड ट्रैकिंग सक्षम है।"
     )
 
     fun get(language: Language): AppStrings = when (language) {

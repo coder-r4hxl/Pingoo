@@ -83,6 +83,9 @@ fun MainAppScreen(
         BottomNavItem(Screen.Settings, strings.navSettings, Icons.Default.Settings)
     )
 
+    val selectedDestination by viewModel.selectedDestination.collectAsState()
+    val journeyEvaluation by viewModel.journeyEvaluation.collectAsState()
+
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -137,7 +140,18 @@ fun MainAppScreen(
                 )
             }
             composable(Screen.Journey.route) {
-                JourneyScreen(strings = strings)
+                JourneyScreen(
+                    strings = strings,
+                    destinations = destinations,
+                    selectedDestination = selectedDestination,
+                    evaluation = journeyEvaluation,
+                    language = userSettings.language,
+                    onSelectDestination = { viewModel.selectDestination(it) },
+                    onStartJourney = { viewModel.startJourney(it) },
+                    onPauseJourney = { viewModel.pauseJourney() },
+                    onResumeJourney = { viewModel.resumeJourney() },
+                    onStopJourney = { viewModel.stopJourney() }
+                )
             }
             composable(Screen.History.route) {
                 HistoryScreen(strings = strings)
