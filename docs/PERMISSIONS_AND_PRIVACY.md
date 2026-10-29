@@ -10,9 +10,9 @@
    - `ACCESS_FINE_LOCATION` & `ACCESS_COARSE_LOCATION`: Required for GPS/Network location fixes during journey tracking.
    - `FOREGROUND_SERVICE` & `FOREGROUND_SERVICE_LOCATION`: Required for Android 10+ and 14 foreground location tracking service.
    - `POST_NOTIFICATIONS`: Required on Android 13+ (API 33+) to show the ongoing journey tracking status notification.
+   - `VIBRATE`: Required for haptic arrival alert patterns.
+   - `INTERNET` & `ACCESS_NETWORK_STATE`: Required for OpenStreetMap tile rendering and checking stable GitHub release update manifests.
+   - `REQUEST_INSTALL_PACKAGES`: Required on Android 8.0+ to trigger the native Android Package Installer for downloaded in-app updates.
 
-3. **No Background Location Tracking Without Active Journey:**
-   - Location updates are registered ONLY while a journey is actively running in the foreground service and immediately stopped when the user stops or pauses the journey.
-
-4. **No Third-Party Analytics / Tracking:**
+3. **No Third-Party Analytics / Tracking:**
    - Pingoo contains zero advertising SDKs, tracking libraries, cloud location logs, or paid APIs.

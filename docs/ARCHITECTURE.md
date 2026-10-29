@@ -15,7 +15,7 @@ Pingoo follows Clean Architecture and MVVM (Model-View-ViewModel) principles to 
 |                     Domain Layer                            |
 |   Models (Destination, MultiStopJourney, JourneyHistoryItem)|
 |   State Engines (MultiStopEngine, ArrivalStateMachine,      |
-|                  AlarmManagerEngine)                        |
+|                  AlarmManagerEngine, AppUpdateEngine)       |
 |   Calculators (HaversineDistanceCalculator)                 |
 |   Utilities (DistanceFormatter)                             |
 +------------------------------+------------------------------+
@@ -24,6 +24,7 @@ Pingoo follows Clean Architecture and MVVM (Model-View-ViewModel) principles to 
 +-------------------------------------------------------------+
 |               Data & Service Layers                         |
 |   LocationTrackingService (Foreground Service)              |
+|   ApkDownloader (Secure HTTPS Update Downloader)            |
 |   OSMDroid Tile Engine (OpenStreetMap tile renderer)        |
 |   AlarmPlayer (Ringtone & Vibration Engine)                |
 |   Room AppDatabase with Safe Migrations (1->2, 2->3)        |
@@ -31,11 +32,12 @@ Pingoo follows Clean Architecture and MVVM (Model-View-ViewModel) principles to 
 +-------------------------------------------------------------+
 ```
 
-## Security & Android Behavior Hardening
+## Phase 10 Architecture: Secure In-App Updater
 
-### 1. Component Protections & Least Privilege
-- Internal Android components (`AlarmActivity`, `LocationTrackingService`) are explicitly marked as `android:exported="false"`.
-- Requests minimal permissions (`ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION`, `POST_NOTIFICATIONS`, `VIBRATE`, `INTERNET`, `ACCESS_NETWORK_STATE`).
+### 1. AppUpdateEngine (`com.pingoo.app.domain.updater.AppUpdateEngine`)
+- Compares candidate release version codes against installed `versionCode`.
+- Enforces HTTPS URLs and verifies SHA-256 digests prior to triggering installer intents.
 
-### 2. Safe Room Migrations (`AppDatabase`)
-- Explicit migration paths `MIGRATION_1_2` and `MIGRATION_2_3` ensure zero data loss during app updates.
+### 2. FileProvider & Intent Installation (`com.pingoo.app.service.updater.ApkDownloader`)
+- Downloads update APKs into app-private cache directory (`cacheDir/apk_updates`).
+- Generates `content://com.pingoo.app.fileprovider/...` Content URIs via Android `FileProvider` for `ACTION_VIEW` package installer execution.

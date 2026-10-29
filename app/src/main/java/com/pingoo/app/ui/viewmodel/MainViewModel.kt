@@ -23,11 +23,17 @@ import com.pingoo.app.domain.model.JourneyStop
 import com.pingoo.app.domain.model.Language
 import com.pingoo.app.domain.model.MultiStopJourney
 import com.pingoo.app.domain.model.UserSettings
+import com.pingoo.app.domain.updater.AppUpdateEngine
+import com.pingoo.app.domain.updater.ReleaseManifest
+import com.pingoo.app.domain.updater.UpdateStatus
 import com.pingoo.app.domain.usecase.ValidateDestinationUseCase
 import com.pingoo.app.domain.usecase.ValidationResult
 import com.pingoo.app.service.LocationTrackingService
+import com.pingoo.app.service.updater.ApkDownloader
 import com.pingoo.app.ui.i18n.AppStrings
 import com.pingoo.app.ui.i18n.Translations
+import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +41,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -48,6 +55,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsRepository = SettingsRepositoryImpl(userPreferencesRepository)
 
     private val validateDestinationUseCase = ValidateDestinationUseCase()
+    private val apkDownloader = ApkDownloader(application)
 
     private var trackingService: LocationTrackingService? = null
     private var isServiceBound = false
@@ -66,6 +74,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Multi-stop journey creation state
     private val _stagedStops = MutableStateFlow<List<Destination>>(emptyList())
     val stagedStops: StateFlow<List<Destination>> = _stagedStops.asStateFlow()
+
+    // In-app updater status
+    private val _updateStatus = MutableStateFlow<UpdateStatus>(UpdateStatus.Idle)
+    val updateStatus: StateFlow<UpdateStatus> = _updateStatus.asStateFlow()
 
     val userSettings: StateFlow<UserSettings> = settingsRepository.getUserSettings()
         .stateIn(
@@ -149,6 +161,50 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun bindTrackingService() {
         val intent = Intent(getApplication(), LocationTrackingService::class.java)
         getApplication<Application>().bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+    }
+
+    fun checkForAppUpdates() {
+        _updateStatus.value = UpdateStatus.Checking
+        viewModelScope.launch {
+            // Simulated stable release check against latest release manifest structure
+            withContext(Dispatchers.IO) {
+                try {
+                    // Current installed versionCode is 1
+                    val currentVersionCode = 1
+                    // Simulated candidate update manifest for verification
+                    val candidateManifest = ReleaseManifest(
+                        versionCode = 1, // Same version -> Up to date
+                        versionName = "1.0.0",
+                        apkUrl = "https://github.com/coder-r4hxl/Pingoo/releases/download/v1.0.0/app-debug.apk",
+                        sha256Checksum = "",
+                        releaseNotes = "Pingoo Release v1.0.0"
+                    )
+
+                    if (AppUpdateEngine.isUpdateAvailable(currentVersionCode, candidateManifest.versionCode)) {
+                        _updateStatus.value = UpdateStatus.UpdateAvailable(candidateManifest)
+                    } else {
+                        _updateStatus.value = UpdateStatus.UpToDate
+                    }
+                } catch (e: Exception) {
+                    _updateStatus.value = UpdateStatus.Error("Failed to check for updates: ${e.localizedMessage}")
+                }
+            }
+        }
+    }
+
+    fun downloadAndInstallUpdate(manifest: ReleaseManifest) {
+        viewModelScope.launch {
+            _updateStatus.value = UpdateStatus.Downloading(0)
+            val result = apkDownloader.downloadApk(manifest) { progress ->
+                _updateStatus.value = UpdateStatus.Downloading(progress)
+            }
+            _updateStatus.value = result
+        }
+    }
+
+    fun installApk(apkFile: File) {
+        val intent = apkDownloader.promptInstall(apkFile)
+        getApplication<Application>().startActivity(intent)
     }
 
     fun selectDestination(destination: Destination?) {

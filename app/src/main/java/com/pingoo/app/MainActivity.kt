@@ -87,6 +87,7 @@ fun MainAppScreen(
     val stagedStops by viewModel.stagedStops.collectAsState()
     val multiStopEvaluation by viewModel.multiStopEvaluation.collectAsState()
     val journeyHistory by viewModel.journeyHistory.collectAsState()
+    val updateStatus by viewModel.updateStatus.collectAsState()
 
     Scaffold(
         bottomBar = {
@@ -174,9 +175,13 @@ fun MainAppScreen(
                 SettingsScreen(
                     strings = strings,
                     userSettings = userSettings,
+                    updateStatus = updateStatus,
                     onLanguageSelected = { viewModel.changeLanguage(it) },
                     onVibrationToggled = { viewModel.toggleVibration(it) },
                     onSnoozeDurationSelected = { viewModel.setSnoozeDuration(it) },
+                    onCheckForUpdates = { viewModel.checkForAppUpdates() },
+                    onDownloadAndInstallUpdate = { viewModel.downloadAndInstallUpdate(it) },
+                    onInstallApk = { viewModel.installApk(it) },
                     onClearAllData = { viewModel.clearAllHistory() }
                 )
             }

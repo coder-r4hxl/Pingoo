@@ -14,12 +14,15 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,11 +36,14 @@ import com.pingoo.app.domain.model.JourneyHistoryItem
 import com.pingoo.app.domain.model.JourneyState
 import com.pingoo.app.domain.model.Language
 import com.pingoo.app.domain.model.UserSettings
+import com.pingoo.app.domain.updater.ReleaseManifest
+import com.pingoo.app.domain.updater.UpdateStatus
 import com.pingoo.app.domain.usecase.ValidationResult
 import com.pingoo.app.domain.util.DistanceFormatter
 import com.pingoo.app.ui.i18n.AppStrings
 import com.pingoo.app.ui.map.GeocodingHelper
 import com.pingoo.app.ui.map.OsmMapView
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -783,9 +789,13 @@ fun HistoryScreen(
 fun SettingsScreen(
     strings: AppStrings,
     userSettings: UserSettings,
+    updateStatus: UpdateStatus,
     onLanguageSelected: (Language) -> Unit,
     onVibrationToggled: (Boolean) -> Unit,
     onSnoozeDurationSelected: (Int) -> Unit,
+    onCheckForUpdates: () -> Unit,
+    onDownloadAndInstallUpdate: (ReleaseManifest) -> Unit,
+    onInstallApk: (File) -> Unit,
     onClearAllData: () -> Unit
 ) {
     var showClearDataDialog by remember { mutableStateOf(false) }
@@ -868,6 +878,109 @@ fun SettingsScreen(
                         checked = userSettings.isVibrationEnabled,
                         onCheckedChange = onVibrationToggled
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // In-App Updater Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = strings.checkForUpdates,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        IconButton(onClick = onCheckForUpdates) {
+                            Icon(Icons.Default.Refresh, contentDescription = strings.checkForUpdates)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    when (updateStatus) {
+                        is UpdateStatus.Idle -> {
+                            Text(
+                                text = strings.upToDateStatus,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        is UpdateStatus.Checking -> {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = strings.checkingForUpdates,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                        is UpdateStatus.UpToDate -> {
+                            Text(
+                                text = strings.upToDateStatus,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        is UpdateStatus.UpdateAvailable -> {
+                            val manifest = updateStatus.manifest
+                            Column {
+                                Text(
+                                    text = "${strings.updateAvailableHeader} (v${manifest.versionName})",
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(onClick = { onDownloadAndInstallUpdate(manifest) }) {
+                                    Icon(Icons.Default.Download, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(strings.downloadAndInstallUpdate)
+                                }
+                            }
+                        }
+                        is UpdateStatus.Downloading -> {
+                            Column {
+                                Text(
+                                    text = "${strings.downloadingProgress} (${updateStatus.progressPercent}%)",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                LinearProgressIndicator(
+                                    progress = { updateStatus.progressPercent / 100f },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                        is UpdateStatus.ReadyToInstall -> {
+                            Column {
+                                Text(
+                                    text = "Update downloaded & verified!",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(onClick = { onInstallApk(File(updateStatus.apkPath)) }) {
+                                    Icon(Icons.Default.SystemUpdate, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(strings.installUpdateNow)
+                                }
+                            }
+                        }
+                        is UpdateStatus.Error -> {
+                            Text(
+                                text = updateStatus.message,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                 }
             }
 
