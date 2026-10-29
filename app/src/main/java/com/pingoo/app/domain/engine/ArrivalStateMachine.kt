@@ -6,10 +6,18 @@ import com.pingoo.app.domain.model.JourneyState
 import com.pingoo.app.domain.util.HaversineDistanceCalculator
 import kotlin.math.roundToInt
 
+data class JourneyGuardianStatus(
+    val isGpsHealthy: Boolean = true,
+    val isStaleFixWarning: Boolean = false,
+    val isWeakSignalWarning: Boolean = false,
+    val guardianMessage: String = "GPS tracking healthy"
+)
+
 data class StateMachineEvaluation(
     val state: JourneyState,
     val distanceMeters: Double?,
-    val statusMessage: String
+    val statusMessage: String,
+    val guardianStatus: JourneyGuardianStatus = JourneyGuardianStatus()
 )
 
 class ArrivalStateMachine(
@@ -35,7 +43,8 @@ class ArrivalStateMachine(
         return StateMachineEvaluation(
             state = currentState,
             distanceMeters = null,
-            statusMessage = "Started tracking ${destination.name}"
+            statusMessage = "Started tracking ${destination.name}",
+            guardianStatus = JourneyGuardianStatus(isGpsHealthy = true, guardianMessage = "GPS initialized for ${destination.name}")
         )
     }
 
@@ -46,7 +55,8 @@ class ArrivalStateMachine(
         return StateMachineEvaluation(
             state = currentState,
             distanceMeters = lastDistanceMeters,
-            statusMessage = "Tracking paused"
+            statusMessage = "Tracking paused",
+            guardianStatus = JourneyGuardianStatus(isGpsHealthy = true, guardianMessage = "Tracking paused by user")
         )
     }
 
@@ -57,7 +67,8 @@ class ArrivalStateMachine(
         return StateMachineEvaluation(
             state = currentState,
             distanceMeters = lastDistanceMeters,
-            statusMessage = "Tracking resumed"
+            statusMessage = "Tracking resumed",
+            guardianStatus = JourneyGuardianStatus(isGpsHealthy = true, guardianMessage = "Tracking resumed")
         )
     }
 
@@ -69,7 +80,8 @@ class ArrivalStateMachine(
         return StateMachineEvaluation(
             state = currentState,
             distanceMeters = null,
-            statusMessage = "Tracking stopped"
+            statusMessage = "Tracking stopped",
+            guardianStatus = JourneyGuardianStatus(isGpsHealthy = true, guardianMessage = "Tracking stopped")
         )
     }
 
@@ -80,7 +92,8 @@ class ArrivalStateMachine(
         return StateMachineEvaluation(
             state = currentState,
             distanceMeters = lastDistanceMeters,
-            statusMessage = reason
+            statusMessage = reason,
+            guardianStatus = JourneyGuardianStatus(isGpsHealthy = false, guardianMessage = reason)
         )
     }
 
@@ -89,7 +102,8 @@ class ArrivalStateMachine(
             return StateMachineEvaluation(
                 state = currentState,
                 distanceMeters = lastDistanceMeters,
-                statusMessage = "State machine in $currentState state"
+                statusMessage = "State machine in $currentState state",
+                guardianStatus = JourneyGuardianStatus(isGpsHealthy = true, guardianMessage = "Tracking idle/paused")
             )
         }
 
@@ -99,7 +113,8 @@ class ArrivalStateMachine(
             return StateMachineEvaluation(
                 state = JourneyState.IDLE,
                 distanceMeters = null,
-                statusMessage = "No destination set"
+                statusMessage = "No destination set",
+                guardianStatus = JourneyGuardianStatus(isGpsHealthy = false, guardianMessage = "No destination configured")
             )
         }
 
@@ -108,7 +123,8 @@ class ArrivalStateMachine(
             return StateMachineEvaluation(
                 state = currentState,
                 distanceMeters = lastDistanceMeters,
-                statusMessage = "Invalid GPS coordinates received"
+                statusMessage = "Invalid GPS coordinates received",
+                guardianStatus = JourneyGuardianStatus(isGpsHealthy = false, guardianMessage = "Invalid GPS coordinates")
             )
         }
 
@@ -117,7 +133,12 @@ class ArrivalStateMachine(
             return StateMachineEvaluation(
                 state = currentState,
                 distanceMeters = lastDistanceMeters,
-                statusMessage = "GPS accuracy poor (${fix.accuracyMeters.roundToInt()}m > ${maxAcceptableAccuracyMeters.roundToInt()}m threshold)"
+                statusMessage = "GPS accuracy poor (${fix.accuracyMeters.roundToInt()}m > ${maxAcceptableAccuracyMeters.roundToInt()}m threshold)",
+                guardianStatus = JourneyGuardianStatus(
+                    isGpsHealthy = false,
+                    isWeakSignalWarning = true,
+                    guardianMessage = "Weak GPS signal (±${fix.accuracyMeters.roundToInt()}m accuracy)"
+                )
             )
         }
 
@@ -126,7 +147,12 @@ class ArrivalStateMachine(
             return StateMachineEvaluation(
                 state = currentState,
                 distanceMeters = lastDistanceMeters,
-                statusMessage = "Stale GPS fix ignored"
+                statusMessage = "Stale GPS fix ignored",
+                guardianStatus = JourneyGuardianStatus(
+                    isGpsHealthy = false,
+                    isStaleFixWarning = true,
+                    guardianMessage = "GPS fix is stale (>60s old)"
+                )
             )
         }
 
@@ -175,7 +201,8 @@ class ArrivalStateMachine(
         return StateMachineEvaluation(
             state = currentState,
             distanceMeters = distance,
-            statusMessage = "Updated distance: ${distance.roundToInt()}m"
+            statusMessage = "Updated distance: ${distance.roundToInt()}m",
+            guardianStatus = JourneyGuardianStatus(isGpsHealthy = true, guardianMessage = "GPS fix active (±${fix.accuracyMeters.roundToInt()}m)")
         )
     }
 }

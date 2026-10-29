@@ -33,21 +33,15 @@ object GeocodingHelper {
             val geocoder = Geocoder(context, locale)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 suspendCancellableCoroutine { continuation ->
-                    geocoder.getFromLocation(latitude, longitude, 1, object : Geocoder.GeocodeListener {
-                        override fun onGeocode(addresses: MutableList<Address>) {
-                            val first = addresses.firstOrNull()
-                            if (first != null) {
-                                val text = first.getAddressLine(0) ?: "${first.locality ?: ""}, ${first.countryName ?: ""}"
-                                continuation.resume(ReverseGeocodeResult(text.trim(',', ' '), true))
-                            } else {
-                                continuation.resume(ReverseGeocodeResult(formatFallbackCoordinates(latitude, longitude), false))
-                            }
-                        }
-
-                        override fun onError(errorMessage: String?) {
+                    geocoder.getFromLocation(latitude, longitude, 1) { addresses ->
+                        val first = addresses.firstOrNull()
+                        if (first != null) {
+                            val text = first.getAddressLine(0) ?: "${first.locality ?: ""}, ${first.countryName ?: ""}"
+                            continuation.resume(ReverseGeocodeResult(text.trim(',', ' '), true))
+                        } else {
                             continuation.resume(ReverseGeocodeResult(formatFallbackCoordinates(latitude, longitude), false))
                         }
-                    })
+                    }
                 }
             } else {
                 @Suppress("DEPRECATION")
