@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -60,7 +61,7 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val initialEval = _multiStopEvaluation.value
-        startForeground(NOTIFICATION_ID, buildNotification(initialEval))
+        startForegroundCompat(NOTIFICATION_ID, buildNotification(initialEval))
 
         when (intent?.action) {
             ACTION_STOP_SERVICE -> stopMonitoring()
@@ -70,6 +71,14 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
             ACTION_DISMISS_ALARM -> dismissAlarmAndAdvance()
         }
         return START_STICKY
+    }
+
+    private fun startForegroundCompat(id: Int, notification: Notification) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        } else {
+            startForeground(id, notification)
+        }
     }
 
     fun startMultiStopJourney(journey: MultiStopJourney) {
