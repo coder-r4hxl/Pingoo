@@ -42,6 +42,7 @@ import com.pingoo.app.domain.usecase.ValidationResult
 import com.pingoo.app.domain.util.DistanceFormatter
 import com.pingoo.app.ui.i18n.AppStrings
 import com.pingoo.app.ui.map.GeocodingHelper
+import com.pingoo.app.ui.map.NavigationIntentHelper
 import com.pingoo.app.ui.map.OsmMapView
 import java.io.File
 import java.text.SimpleDateFormat
@@ -482,6 +483,22 @@ fun JourneyScreen(
                             text = "Active Stop (${evaluation.activeStopIndex + 1}/${evaluation.totalStops}): ${stop.destination.name}",
                             style = MaterialTheme.typography.titleMedium
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedButton(
+                            onClick = {
+                                NavigationIntentHelper.launchNavigationIntent(
+                                    context = context,
+                                    latitude = stop.destination.latitude,
+                                    longitude = stop.destination.longitude,
+                                    label = stop.destination.name
+                                )
+                            },
+                            modifier = Modifier.padding(top = 4.dp)
+                        ) {
+                            Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Navigate via External App")
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(4.dp))
