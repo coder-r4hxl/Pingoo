@@ -25,6 +25,21 @@ class UserPreferencesRepository(private val context: Context) {
         val SNOOZE_DURATION = intPreferencesKey("snooze_duration_minutes")
         val DARK_THEME = booleanPreferencesKey("dark_theme")
         val HAS_COMPLETED_ONBOARDING = booleanPreferencesKey("has_completed_onboarding")
+        val ACTIVE_JOURNEY_ID = intPreferencesKey("active_journey_id")
+    }
+
+    val activeJourneyId: Flow<Long?> = context.dataStore.data.map { preferences ->
+        preferences[Keys.ACTIVE_JOURNEY_ID]?.toLong()
+    }
+
+    suspend fun setActiveJourneyId(journeyId: Long?) {
+        context.dataStore.edit { preferences ->
+            if (journeyId != null) {
+                preferences[Keys.ACTIVE_JOURNEY_ID] = journeyId.toInt()
+            } else {
+                preferences.remove(Keys.ACTIVE_JOURNEY_ID)
+            }
+        }
     }
 
     val userSettings: Flow<UserSettings> = context.dataStore.data.map { preferences ->

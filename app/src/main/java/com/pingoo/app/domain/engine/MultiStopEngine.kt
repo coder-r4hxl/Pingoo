@@ -13,7 +13,8 @@ data class MultiStopEvaluation(
     val distanceToActiveStopMeters: Double?,
     val statusMessage: String,
     val isJourneyCompleted: Boolean = false,
-    val lastFix: GpsFix? = null
+    val lastFix: GpsFix? = null,
+    val journeyTitle: String = ""
 )
 
 class MultiStopEngine(
@@ -38,7 +39,8 @@ class MultiStopEngine(
                 totalStops = journey.stops.size,
                 distanceToActiveStopMeters = null,
                 statusMessage = "Journey has no stops",
-                isJourneyCompleted = true
+                isJourneyCompleted = true,
+                journeyTitle = journey.title
             )
         }
 
@@ -49,7 +51,8 @@ class MultiStopEngine(
             activeStopIndex = journey.activeStopIndex,
             totalStops = journey.stops.size,
             distanceToActiveStopMeters = eval.distanceMeters,
-            statusMessage = "Started tracking stop ${journey.activeStopIndex + 1}/${journey.stops.size}: ${firstStop.destination.name}"
+            statusMessage = "Started tracking stop ${journey.activeStopIndex + 1}/${journey.stops.size}: ${firstStop.destination.name}",
+            journeyTitle = journey.title
         )
     }
 
@@ -62,7 +65,8 @@ class MultiStopEngine(
             totalStops = 0,
             distanceToActiveStopMeters = null,
             statusMessage = "No active journey",
-            lastFix = fix
+            lastFix = fix,
+            journeyTitle = ""
         )
 
         val activeStop = activeJourney.currentStop ?: return MultiStopEvaluation(
@@ -73,7 +77,8 @@ class MultiStopEngine(
             distanceToActiveStopMeters = null,
             statusMessage = "Journey completed",
             isJourneyCompleted = true,
-            lastFix = fix
+            lastFix = fix,
+            journeyTitle = activeJourney.title
         )
 
         val eval = stateMachine.processGpsFix(fix, currentTimeMillis)
@@ -85,7 +90,8 @@ class MultiStopEngine(
             totalStops = activeJourney.stops.size,
             distanceToActiveStopMeters = eval.distanceMeters,
             statusMessage = eval.statusMessage,
-            lastFix = fix
+            lastFix = fix,
+            journeyTitle = activeJourney.title
         )
     }
 
@@ -97,12 +103,18 @@ class MultiStopEngine(
             totalStops = 0,
             distanceToActiveStopMeters = null,
             statusMessage = "No active journey to advance",
-            lastFix = lastRecordedFix
+            lastFix = lastRecordedFix,
+            journeyTitle = ""
         )
 
         val activeStop = activeJourney.currentStop
         if (activeStop != null) {
-            alarmEngine.acknowledgeArrival(activeStop.destination.id)
+            val key = alarmEngine.makeOccurrenceKey(
+                activeStop.destination.id,
+                activeStop.stopOrder,
+                activeJourney.id
+            )
+            alarmEngine.acknowledgeArrival(key)
         }
 
         val nextIndex = activeJourney.activeStopIndex + 1
@@ -119,7 +131,8 @@ class MultiStopEngine(
                 totalStops = updatedJourney.stops.size,
                 distanceToActiveStopMeters = null,
                 statusMessage = "Advanced to stop ${nextIndex + 1}/${updatedJourney.stops.size}: ${nextStop.destination.name}",
-                lastFix = lastRecordedFix
+                lastFix = lastRecordedFix,
+                journeyTitle = updatedJourney.title
             )
         } else {
             val completedJourney = activeJourney.copy(isCompleted = true)
@@ -134,7 +147,8 @@ class MultiStopEngine(
                 distanceToActiveStopMeters = null,
                 statusMessage = "Journey Completed! All stops reached.",
                 isJourneyCompleted = true,
-                lastFix = lastRecordedFix
+                lastFix = lastRecordedFix,
+                journeyTitle = completedJourney.title
             )
         }
     }
@@ -149,7 +163,8 @@ class MultiStopEngine(
             totalStops = activeJourney?.stops?.size ?: 0,
             distanceToActiveStopMeters = eval.distanceMeters,
             statusMessage = "Journey Paused",
-            lastFix = lastRecordedFix
+            lastFix = lastRecordedFix,
+            journeyTitle = activeJourney?.title ?: ""
         )
     }
 
@@ -163,7 +178,8 @@ class MultiStopEngine(
             totalStops = activeJourney?.stops?.size ?: 0,
             distanceToActiveStopMeters = eval.distanceMeters,
             statusMessage = "Journey Resumed",
-            lastFix = lastRecordedFix
+            lastFix = lastRecordedFix,
+            journeyTitle = activeJourney?.title ?: ""
         )
     }
 
@@ -171,6 +187,7 @@ class MultiStopEngine(
         stateMachine.stopTracking()
         alarmEngine.clearAll()
         val total = currentJourney?.stops?.size ?: 0
+        val title = currentJourney?.title ?: ""
         currentJourney = null
         lastRecordedFix = null
 
@@ -181,7 +198,8 @@ class MultiStopEngine(
             totalStops = total,
             distanceToActiveStopMeters = null,
             statusMessage = "Journey Stopped",
-            lastFix = null
+            lastFix = null,
+            journeyTitle = title
         )
     }
 }

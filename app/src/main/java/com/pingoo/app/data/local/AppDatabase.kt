@@ -21,7 +21,7 @@ import com.pingoo.app.data.local.entity.JourneyStopEntity
         JourneyStopEntity::class,
         JourneyHistoryEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -89,6 +89,35 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Recreate journey_stops with ON DELETE CASCADE for destinationId to prevent SQLiteConstraintException
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `journey_stops_new` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `journeyId` INTEGER NOT NULL,
+                        `destinationId` INTEGER NOT NULL,
+                        `stopOrder` INTEGER NOT NULL,
+                        `isAcknowledged` INTEGER NOT NULL,
+                        FOREIGN KEY(`journeyId`) REFERENCES `journeys`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                        FOREIGN KEY(`destinationId`) REFERENCES `destinations`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `journey_stops_new` (`id`, `journeyId`, `destinationId`, `stopOrder`, `isAcknowledged`)
+                    SELECT `id`, `journeyId`, `destinationId`, `stopOrder`, `isAcknowledged` FROM `journey_stops`
+                    """.trimIndent()
+                )
+                db.execSQL("DROP TABLE `journey_stops`")
+                db.execSQL("ALTER TABLE `journey_stops_new` RENAME TO `journey_stops`")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_journey_stops_journeyId` ON `journey_stops` (`journeyId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_journey_stops_destinationId` ON `journey_stops` (`destinationId`)")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -96,7 +125,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "pingoo_database"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
                 INSTANCE = instance
                 instance

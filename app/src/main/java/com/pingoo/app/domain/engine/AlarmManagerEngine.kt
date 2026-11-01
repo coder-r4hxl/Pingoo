@@ -5,25 +5,41 @@ import java.util.concurrent.ConcurrentHashMap
 class AlarmManagerEngine(
     val defaultSnoozeDurationMillis: Long = 5 * 60 * 1000L // 5 minutes
 ) {
-    private val acknowledgedArrivals = ConcurrentHashMap<Long, Long>() // destinationId -> ackTime
-    private val snoozeTimers = ConcurrentHashMap<Long, Long>() // destinationId -> snoozeUntilTime
+    // Keyed by unique stop occurrence key: "${journeyId}_${stopOrder}_${destinationId}" or destinationId.toString()
+    private val acknowledgedArrivals = ConcurrentHashMap<String, Long>()
+    private val snoozeTimers = ConcurrentHashMap<String, Long>()
+
+    fun makeOccurrenceKey(destinationId: Long, stopOrder: Int = 0, journeyId: Long = 0L): String {
+        return "${journeyId}_${stopOrder}_${destinationId}"
+    }
+
+    fun isArrivalAlertAllowed(
+        key: String,
+        currentTimeMillis: Long = System.currentTimeMillis()
+    ): Boolean {
+        if (acknowledgedArrivals.containsKey(key)) {
+            return false
+        }
+        val snoozedUntil = snoozeTimers[key]
+        if (snoozedUntil != null && currentTimeMillis < snoozedUntil) {
+            return false
+        }
+        return true
+    }
 
     fun isArrivalAlertAllowed(
         destinationId: Long,
         currentTimeMillis: Long = System.currentTimeMillis()
     ): Boolean {
-        // Check if previously acknowledged
-        if (acknowledgedArrivals.containsKey(destinationId)) {
-            return false
-        }
+        return isArrivalAlertAllowed(destinationId.toString(), currentTimeMillis)
+    }
 
-        // Check if currently snoozed
-        val snoozedUntil = snoozeTimers[destinationId]
-        if (snoozedUntil != null && currentTimeMillis < snoozedUntil) {
-            return false
-        }
-
-        return true
+    fun snoozeArrival(
+        key: String,
+        snoozeDurationMillis: Long = defaultSnoozeDurationMillis,
+        currentTimeMillis: Long = System.currentTimeMillis()
+    ) {
+        snoozeTimers[key] = currentTimeMillis + snoozeDurationMillis
     }
 
     fun snoozeArrival(
@@ -31,20 +47,31 @@ class AlarmManagerEngine(
         snoozeDurationMillis: Long = defaultSnoozeDurationMillis,
         currentTimeMillis: Long = System.currentTimeMillis()
     ) {
-        snoozeTimers[destinationId] = currentTimeMillis + snoozeDurationMillis
+        snoozeArrival(destinationId.toString(), snoozeDurationMillis, currentTimeMillis)
+    }
+
+    fun acknowledgeArrival(
+        key: String,
+        currentTimeMillis: Long = System.currentTimeMillis()
+    ) {
+        acknowledgedArrivals[key] = currentTimeMillis
+        snoozeTimers.remove(key)
     }
 
     fun acknowledgeArrival(
         destinationId: Long,
         currentTimeMillis: Long = System.currentTimeMillis()
     ) {
-        acknowledgedArrivals[destinationId] = currentTimeMillis
-        snoozeTimers.remove(destinationId)
+        acknowledgeArrival(destinationId.toString(), currentTimeMillis)
+    }
+
+    fun resetArrivalState(key: String) {
+        acknowledgedArrivals.remove(key)
+        snoozeTimers.remove(key)
     }
 
     fun resetArrivalState(destinationId: Long) {
-        acknowledgedArrivals.remove(destinationId)
-        snoozeTimers.remove(destinationId)
+        resetArrivalState(destinationId.toString())
     }
 
     fun clearAll() {

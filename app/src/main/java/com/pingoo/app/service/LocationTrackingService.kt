@@ -18,25 +18,37 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.pingoo.app.MainActivity
+import com.pingoo.app.data.datastore.UserPreferencesRepository
 import com.pingoo.app.domain.engine.MultiStopEngine
 import com.pingoo.app.domain.engine.MultiStopEvaluation
 import com.pingoo.app.domain.model.Destination
 import com.pingoo.app.domain.model.GpsFix
 import com.pingoo.app.domain.model.JourneyState
 import com.pingoo.app.domain.model.JourneyStop
+import com.pingoo.app.domain.model.Language
 import com.pingoo.app.domain.model.MultiStopJourney
 import com.pingoo.app.domain.util.DistanceFormatter
 import com.pingoo.app.service.alarm.AlarmPlayer
 import com.pingoo.app.ui.alarm.AlarmActivity
+import com.pingoo.app.ui.i18n.Translations
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
 
 class LocationTrackingService : Service(), LocationListener, LocationServiceContract {
 
     private val binder = LocalBinder()
-    private val multiStopEngine = MultiStopEngine()
+    val multiStopEngine = MultiStopEngine()
     private lateinit var alarmPlayer: AlarmPlayer
+    private lateinit var userPreferencesRepository: UserPreferencesRepository
+
+    private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
+    private var currentLanguage: Language = Language.ENGLISH
 
     private val _multiStopEvaluation = MutableStateFlow<MultiStopEvaluation>(
         MultiStopEvaluation(JourneyState.IDLE, null, 0, 0, null, "Tracking Service Idle")
@@ -45,6 +57,7 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
 
     private var locationManager: LocationManager? = null
     private var isTrackingActive = false
+    private var currentPresentedArrivalKey: String? = null
 
     inner class LocalBinder : Binder() {
         fun getService(): LocationTrackingService = this@LocationTrackingService
@@ -54,14 +67,21 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
         super.onCreate()
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         alarmPlayer = AlarmPlayer(this)
-        createNotificationChannel()
+        userPreferencesRepository = UserPreferencesRepository(this)
+        createNotificationChannels()
+
+        serviceScope.launch {
+            userPreferencesRepository.userSettings.collect { settings ->
+                currentLanguage = settings.language
+            }
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val initialEval = _multiStopEvaluation.value
-        startForegroundCompat(NOTIFICATION_ID, buildNotification(initialEval))
+        startForegroundCompat(NOTIFICATION_ID, buildTrackingNotification(initialEval))
 
         when (intent?.action) {
             ACTION_STOP_SERVICE -> stopMonitoring()
@@ -84,6 +104,7 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
     fun startMultiStopJourney(journey: MultiStopJourney) {
         val eval = multiStopEngine.startJourney(journey)
         _multiStopEvaluation.value = eval
+        currentPresentedArrivalKey = null
 
         updateNotification(eval)
         isTrackingActive = true
@@ -94,6 +115,7 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
         val eval = multiStopEngine.pauseJourney()
         _multiStopEvaluation.value = eval
         alarmPlayer.stopAlarm()
+        cancelArrivalNotification()
         unregisterLocationUpdates()
         updateNotification(eval)
     }
@@ -106,13 +128,23 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
     }
 
     fun snoozeAlarm() {
-        val destId = multiStopEngine.journey?.currentStop?.destination?.id ?: 0L
-        multiStopEngine.alarmEngine.snoozeArrival(destId)
+        val stop = multiStopEngine.journey?.currentStop
+        val key = if (stop != null) {
+            multiStopEngine.alarmEngine.makeOccurrenceKey(
+                stop.destination.id,
+                stop.stopOrder,
+                multiStopEngine.journey?.id ?: 0L
+            )
+        } else "0"
+        multiStopEngine.alarmEngine.snoozeArrival(key)
         alarmPlayer.stopAlarm()
+        cancelArrivalNotification()
     }
 
     fun dismissAlarmAndAdvance() {
         alarmPlayer.stopAlarm()
+        cancelArrivalNotification()
+        currentPresentedArrivalKey = null
         val eval = multiStopEngine.acknowledgeActiveStopAndAdvance()
         _multiStopEvaluation.value = eval
         updateNotification(eval)
@@ -122,15 +154,15 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
         }
     }
 
-    override fun startMonitoring() {
-        // Fallback for contract
-    }
+    override fun startMonitoring() {}
 
     override fun stopMonitoring() {
         val eval = multiStopEngine.stopJourney()
         _multiStopEvaluation.value = eval
         isTrackingActive = false
+        currentPresentedArrivalKey = null
         alarmPlayer.stopAlarm()
+        cancelArrivalNotification()
         unregisterLocationUpdates()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -214,22 +246,86 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
         _multiStopEvaluation.value = eval
 
         if (eval.journeyState == JourneyState.ARRIVED) {
-            val destId = eval.activeStop?.destination?.id ?: 0L
-            if (multiStopEngine.alarmEngine.isArrivalAlertAllowed(destId)) {
-                alarmPlayer.startAlarm(vibrate = eval.activeStop?.destination?.vibrate ?: true)
-                launchAlarmActivity(eval.activeStop?.destination?.name ?: "Destination")
+            val stop = eval.activeStop
+            val destId = stop?.destination?.id ?: 0L
+            val occurrenceKey = multiStopEngine.alarmEngine.makeOccurrenceKey(
+                destId,
+                stop?.stopOrder ?: 0,
+                multiStopEngine.journey?.id ?: 0L
+            )
+
+            if (multiStopEngine.alarmEngine.isArrivalAlertAllowed(occurrenceKey)) {
+                // Trigger once per unique arrival event to prevent loop
+                if (currentPresentedArrivalKey != occurrenceKey) {
+                    currentPresentedArrivalKey = occurrenceKey
+                    alarmPlayer.startAlarm(vibrate = stop?.destination?.vibrate ?: true)
+                    presentArrivalAlert(stop?.destination?.name ?: "Destination")
+                }
             }
         }
 
         updateNotification(eval)
     }
 
-    private fun launchAlarmActivity(destinationName: String) {
+    private fun presentArrivalAlert(destinationName: String) {
+        val strings = Translations.get(currentLanguage)
+
+        // Launch full-screen lock overlay if possible, or fallback gracefully
         val alarmIntent = Intent(this, AlarmActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(AlarmActivity.EXTRA_DEST_NAME, destinationName)
+            putExtra(AlarmActivity.EXTRA_LANGUAGE, currentLanguage.code)
         }
-        startActivity(alarmIntent)
+
+        val fullScreenPendingIntent = PendingIntent.getActivity(
+            this,
+            ARRIVAL_PENDING_INTENT_ID,
+            alarmIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val snoozeIntent = PendingIntent.getService(
+            this,
+            4,
+            Intent(this, LocationTrackingService::class.java).apply { action = ACTION_SNOOZE_ALARM },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val dismissIntent = PendingIntent.getService(
+            this,
+            5,
+            Intent(this, LocationTrackingService::class.java).apply { action = ACTION_DISMISS_ALARM },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val arrivalNotification = NotificationCompat.Builder(this, ARRIVAL_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle("${strings.alarmArrivalHeader}: $destinationName")
+            .setContentText(strings.alarmArrivedMessage)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setFullScreenIntent(fullScreenPendingIntent, true)
+            .addAction(android.R.drawable.ic_popup_sync, strings.alarmSnoozeButton, snoozeIntent)
+            .addAction(android.R.drawable.ic_menu_compass, strings.alarmDismissButton, dismissIntent)
+            .setAutoCancel(false)
+            .setOngoing(true)
+            .build()
+
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(ARRIVAL_NOTIFICATION_ID, arrivalNotification)
+
+        // Also attempt direct activity start for foreground scenarios
+        try {
+            startActivity(alarmIntent)
+        } catch (e: Exception) {
+            // Background start can be blocked by Android 10+; high-importance notification handles it
+        }
+    }
+
+    private fun cancelArrivalNotification() {
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.cancel(ARRIVAL_NOTIFICATION_ID)
     }
 
     override fun onProviderEnabled(provider: String) {
@@ -241,21 +337,32 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
         updateFromStateMachine(eval.state, eval.statusMessage)
     }
 
-    private fun createNotificationChannel() {
+    private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
+            val trackingChannel = NotificationChannel(
+                TRACKING_CHANNEL_ID,
                 "Pingoo Journey Tracking",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Shows live GPS journey progress and destination arrival alerts"
+                description = "Shows live GPS journey progress"
             }
+
+            val arrivalChannel = NotificationChannel(
+                ARRIVAL_CHANNEL_ID,
+                "Pingoo Arrival Alarms",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Heads-up alerts and full-screen arrival alarms"
+                enableVibration(true)
+            }
+
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
+            manager.createNotificationChannel(trackingChannel)
+            manager.createNotificationChannel(arrivalChannel)
         }
     }
 
-    private fun buildNotification(eval: MultiStopEvaluation): Notification {
+    private fun buildTrackingNotification(eval: MultiStopEvaluation): Notification {
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
@@ -284,22 +391,23 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val strings = Translations.get(currentLanguage)
         val stopName = eval.activeStop?.destination?.name ?: "Destination"
-        val distText = DistanceFormatter.formatDistance(eval.distanceToActiveStopMeters)
+        val distText = DistanceFormatter.formatDistance(eval.distanceToActiveStopMeters, currentLanguage)
         val stopProgressText = if (eval.totalStops > 0) "Stop ${eval.activeStopIndex + 1}/${eval.totalStops}: $stopName" else stopName
 
         val contentTitle = when (eval.journeyState) {
-            JourneyState.ARRIVED -> "Arrived at $stopName!"
+            JourneyState.ARRIVED -> "${strings.alarmArrivalHeader} $stopName!"
             JourneyState.APPROACHING -> "Approaching $stopName"
             JourneyState.TRACKING -> "Tracking to $stopName"
-            JourneyState.PAUSED -> "Journey Paused"
-            JourneyState.GPS_UNAVAILABLE -> "GPS Signal Issue"
-            else -> "Pingoo Journey Tracker"
+            JourneyState.PAUSED -> strings.pauseMonitoring
+            JourneyState.GPS_UNAVAILABLE -> strings.liveGpsStatus
+            else -> strings.appName
         }
 
         val contentText = "$stopProgressText • Rem: $distText"
 
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, TRACKING_CHANNEL_ID)
             .setContentTitle(contentTitle)
             .setContentText(contentText)
             .setSmallIcon(android.R.drawable.ic_menu_compass)
@@ -308,30 +416,35 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
             .setPriority(NotificationCompat.PRIORITY_LOW)
 
         if (eval.journeyState == JourneyState.TRACKING || eval.journeyState == JourneyState.APPROACHING) {
-            builder.addAction(android.R.drawable.ic_media_pause, "Pause", pauseIntent)
+            builder.addAction(android.R.drawable.ic_media_pause, strings.pauseMonitoring, pauseIntent)
         } else if (eval.journeyState == JourneyState.PAUSED) {
-            builder.addAction(android.R.drawable.ic_media_play, "Resume", resumeIntent)
+            builder.addAction(android.R.drawable.ic_media_play, strings.resumeMonitoring, resumeIntent)
         }
 
-        builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopIntent)
+        builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, strings.stopMonitoring, stopIntent)
 
         return builder.build()
     }
 
     private fun updateNotification(eval: MultiStopEvaluation) {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(NOTIFICATION_ID, buildNotification(eval))
+        manager.notify(NOTIFICATION_ID, buildTrackingNotification(eval))
     }
 
     override fun onDestroy() {
         alarmPlayer.stopAlarm()
+        cancelArrivalNotification()
         unregisterLocationUpdates()
         super.onDestroy()
     }
 
     companion object {
-        const val CHANNEL_ID = "pingoo_journey_channel"
+        const val TRACKING_CHANNEL_ID = "pingoo_journey_channel"
+        const val ARRIVAL_CHANNEL_ID = "pingoo_arrival_channel"
+
         const val NOTIFICATION_ID = 2001
+        const val ARRIVAL_NOTIFICATION_ID = 2002
+        const val ARRIVAL_PENDING_INTENT_ID = 2003
 
         const val ACTION_START_SERVICE = "com.pingoo.app.START_SERVICE"
         const val ACTION_STOP_SERVICE = "com.pingoo.app.STOP_SERVICE"
@@ -339,12 +452,6 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
         const val ACTION_RESUME_SERVICE = "com.pingoo.app.RESUME_SERVICE"
         const val ACTION_SNOOZE_ALARM = "com.pingoo.app.SNOOZE_ALARM"
         const val ACTION_DISMISS_ALARM = "com.pingoo.app.DISMISS_ALARM"
-
-        const val EXTRA_DEST_NAME = "extra_dest_name"
-        const val EXTRA_DEST_LAT = "extra_dest_lat"
-        const val EXTRA_DEST_LNG = "extra_dest_lng"
-        const val EXTRA_DEST_RADIUS = "extra_dest_radius"
-        const val EXTRA_DEST_WARNING = "extra_dest_warning"
 
         private const val MIN_TIME_BETWEEN_UPDATES_MS = 2000L // 2 seconds
         private const val MIN_DISTANCE_CHANGE_METERS = 5.0f // 5 meters

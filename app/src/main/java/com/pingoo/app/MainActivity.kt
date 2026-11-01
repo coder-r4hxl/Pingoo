@@ -200,7 +200,7 @@ fun MainAppScreen(
                     onCheckForUpdates = { viewModel.checkForAppUpdates() },
                     onDownloadAndInstallUpdate = { viewModel.downloadAndInstallUpdate(it) },
                     onInstallApk = { viewModel.installApk(it) },
-                    onClearAllData = { viewModel.clearAllHistory() }
+                    onClearAllData = { viewModel.clearAllUserData() }
                 )
             }
         }

@@ -34,11 +34,13 @@ import com.pingoo.app.service.updater.ApkDownloader
 import com.pingoo.app.ui.i18n.AppStrings
 import com.pingoo.app.ui.i18n.Translations
 import java.io.File
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -63,6 +65,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var pendingJourneyToStart: MultiStopJourney? = null
 
     private var currentJourneyStartTimeMillis: Long = 0L
+    private var currentActiveJourneyTitle: String = ""
 
     private val _selectedDestination = MutableStateFlow<Destination?>(null)
     val selectedDestination: StateFlow<Destination?> = _selectedDestination.asStateFlow()
@@ -153,6 +156,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 viewModelScope.launch {
                     service.multiStopEvaluation.collect { eval ->
                         _multiStopEvaluation.value = eval
+
+                        // Automatically record completed history when all stops acknowledged
+                        if (eval.isJourneyCompleted && eval.totalStops > 0) {
+                            recordJourneyCompletion(eval)
+                        }
                     }
                 }
 
@@ -171,11 +179,62 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         bindTrackingService()
+        restoreJourneyIfActive()
     }
 
     private fun bindTrackingService() {
         val intent = Intent(getApplication(), LocationTrackingService::class.java)
         getApplication<Application>().bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+    }
+
+    private fun restoreJourneyIfActive() {
+        viewModelScope.launch {
+            val savedId = userPreferencesRepository.activeJourneyId.firstOrNull()
+            if (savedId != null) {
+                val journeyEntity = journeyDao.getJourneyById(savedId)
+                if (journeyEntity != null && !journeyEntity.isCompleted) {
+                    val stopEntities = journeyDao.getStopsForJourney(savedId)
+                    val stops = mutableListOf<JourneyStop>()
+                    for (se in stopEntities) {
+                        val dest = destinationRepository.getDestinationById(se.destinationId)
+                        if (dest != null) {
+                            stops.add(JourneyStop(destination = dest, stopOrder = se.stopOrder, isAcknowledged = se.isAcknowledged))
+                        }
+                    }
+                    if (stops.isNotEmpty()) {
+                        val journey = MultiStopJourney(
+                            id = journeyEntity.id,
+                            title = journeyEntity.title,
+                            stops = stops,
+                            activeStopIndex = journeyEntity.activeStopIndex
+                        )
+                        startMultiStopJourney(journey)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun recordJourneyCompletion(eval: MultiStopEvaluation) {
+        val durationSecs = if (currentJourneyStartTimeMillis > 0) {
+            (System.currentTimeMillis() - currentJourneyStartTimeMillis) / 1000L
+        } else 0L
+
+        val titleToRecord = if (currentActiveJourneyTitle.isNotBlank()) currentActiveJourneyTitle else (eval.journeyTitle.ifBlank { "Journey" })
+
+        viewModelScope.launch {
+            journeyHistoryDao.insertHistory(
+                JourneyHistoryEntity(
+                    title = titleToRecord,
+                    totalStops = eval.totalStops,
+                    reachedStops = eval.totalStops,
+                    isCompleted = true,
+                    durationSeconds = durationSecs
+                )
+            )
+            userPreferencesRepository.setActiveJourneyId(null)
+        }
+        currentJourneyStartTimeMillis = 0L
     }
 
     fun checkForAppUpdates() {
@@ -294,15 +353,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
 
-        val journey = MultiStopJourney(
-            title = if (title.isBlank()) "Multi-Stop Journey (${stops.size} stops)" else title,
-            stops = stops
-        )
+        val journeyTitle = if (title.isBlank()) "Multi-Stop Journey (${stops.size} stops)" else title
+        currentActiveJourneyTitle = journeyTitle
 
         viewModelScope.launch {
             val journeyId = journeyDao.insertJourney(
                 JourneyEntity(
-                    title = journey.title,
+                    title = journeyTitle,
                     activeStopIndex = 0
                 )
             )
@@ -314,13 +371,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             journeyDao.insertJourneyStops(stopEntities)
-        }
+            userPreferencesRepository.setActiveJourneyId(journeyId)
 
-        startMultiStopJourney(journey)
+            val journey = MultiStopJourney(
+                id = journeyId,
+                title = journeyTitle,
+                stops = stops
+            )
+            startMultiStopJourney(journey)
+        }
     }
 
     fun startMultiStopJourney(journey: MultiStopJourney) {
         currentJourneyStartTimeMillis = System.currentTimeMillis()
+        currentActiveJourneyTitle = journey.title
         val context = getApplication<Application>()
         val intent = Intent(context, LocationTrackingService::class.java).apply {
             action = LocationTrackingService.ACTION_START_SERVICE
@@ -357,22 +421,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             (System.currentTimeMillis() - currentJourneyStartTimeMillis) / 1000L
         } else 0L
 
+        // Preserve original journey title
+        val titleToRecord = if (currentActiveJourneyTitle.isNotBlank()) {
+            currentActiveJourneyTitle
+        } else (eval.journeyTitle.ifBlank { eval.activeStop?.destination?.name ?: "Journey" })
+
         if (eval.totalStops > 0) {
             viewModelScope.launch {
                 journeyHistoryDao.insertHistory(
                     JourneyHistoryEntity(
-                        title = eval.activeStop?.destination?.name ?: "Journey",
+                        title = titleToRecord,
                         totalStops = eval.totalStops,
                         reachedStops = eval.activeStopIndex + if (eval.isJourneyCompleted) 1 else 0,
                         isCompleted = eval.isJourneyCompleted,
                         durationSeconds = durationSecs
                     )
                 )
+                userPreferencesRepository.setActiveJourneyId(null)
             }
         }
 
         trackingService?.stopMonitoring()
         currentJourneyStartTimeMillis = 0L
+        currentActiveJourneyTitle = ""
     }
 
     fun deleteHistoryItem(item: JourneyHistoryItem) {
@@ -394,6 +465,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearAllHistory() {
         viewModelScope.launch {
             journeyHistoryDao.deleteAllHistory()
+        }
+    }
+
+    fun clearAllUserData() {
+        // Stop any running monitoring first
+        stopJourney()
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                db.runInTransaction {
+                    // Delete all journey history, stops, journeys and destinations safely
+                    db.openHelper.writableDatabase.execSQL("DELETE FROM journey_history")
+                    db.openHelper.writableDatabase.execSQL("DELETE FROM journey_stops")
+                    db.openHelper.writableDatabase.execSQL("DELETE FROM journeys")
+                    db.openHelper.writableDatabase.execSQL("DELETE FROM destinations")
+                }
+            }
+            userPreferencesRepository.setActiveJourneyId(null)
+            _stagedStops.value = emptyList()
+            _selectedDestination.value = null
         }
     }
 
@@ -455,6 +545,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun parseLocaleIndependentCoordinate(input: String): Double? {
+        val sanitized = input.trim().replace(',', '.')
+        return sanitized.toDoubleOrNull()
+    }
+
     fun addDestination(
         name: String,
         latStr: String,
@@ -464,9 +559,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         isFavorite: Boolean = false,
         onResult: (ValidationResult) -> Unit
     ) {
-        val lat = latStr.toDoubleOrNull()
-        val lng = lngStr.toDoubleOrNull()
-        val radius = radiusStr.toIntOrNull() ?: userSettings.value.defaultRadiusMeters
+        val lat = parseLocaleIndependentCoordinate(latStr)
+        val lng = parseLocaleIndependentCoordinate(lngStr)
+        val radius = radiusStr.trim().toIntOrNull() ?: userSettings.value.defaultRadiusMeters
         val defaultWarning = userSettings.value.defaultAdvanceWarningMeters
         val advanceWarning = maxOf(defaultWarning, radius + 500)
 

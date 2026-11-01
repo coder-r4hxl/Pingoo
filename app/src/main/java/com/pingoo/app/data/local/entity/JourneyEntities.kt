@@ -4,7 +4,6 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import com.pingoo.app.domain.model.Destination
 
 @Entity(tableName = "journeys")
 data class JourneyEntity(
@@ -29,7 +28,7 @@ data class JourneyEntity(
             entity = DestinationEntity::class,
             parentColumns = ["id"],
             childColumns = ["destinationId"],
-            onDelete = ForeignKey.RESTRICT
+            onDelete = ForeignKey.CASCADE
         )
     ],
     indices = [

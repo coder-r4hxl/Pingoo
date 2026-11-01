@@ -44,6 +44,7 @@
         <activity
             android:name=".ui.alarm.AlarmActivity"
             android:exported="false"
+            android:launchMode="singleTop"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:theme="@style/Theme.Pingoo" />

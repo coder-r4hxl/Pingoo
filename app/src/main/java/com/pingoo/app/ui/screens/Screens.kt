@@ -1,8 +1,12 @@
 package com.pingoo.app.ui.screens
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -17,9 +21,11 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.Feedback
+import androidx.compose.material.icons.filled.Help
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -194,9 +200,12 @@ fun DestinationsScreen(
     val context = LocalContext.current
     var geocodedAddressText by remember { mutableStateOf("") }
 
-    LaunchedEffect(lat, lng) {
-        val latVal = lat.toDoubleOrNull()
-        val lngVal = lng.toDoubleOrNull()
+    // Re-key address lookup on coordinates AND language so Hindi/English dynamic toggle refreshes
+    LaunchedEffect(lat, lng, language) {
+        val sanitizedLat = lat.trim().replace(',', '.')
+        val sanitizedLng = lng.trim().replace(',', '.')
+        val latVal = sanitizedLat.toDoubleOrNull()
+        val lngVal = sanitizedLng.toDoubleOrNull()
         if (latVal != null && lngVal != null) {
             val result = GeocodingHelper.reverseGeocode(context, latVal, lngVal, language)
             geocodedAddressText = result.addressText
@@ -407,6 +416,8 @@ fun DestinationsScreen(
                 onDismissRequest = { showMapPicker = false },
                 title = { Text(strings.mapPickerTitle) },
                 text = {
+                    val sanitizedLat = lat.trim().replace(',', '.').toDoubleOrNull() ?: 28.6139
+                    val sanitizedLng = lng.trim().replace(',', '.').toDoubleOrNull() ?: 77.2090
                     Column(modifier = Modifier.fillMaxWidth().height(320.dp)) {
                         Text(
                             text = strings.tapMapToSelectPin,
@@ -415,8 +426,8 @@ fun DestinationsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         OsmMapView(
-                            selectedLatitude = lat.toDoubleOrNull() ?: 28.6139,
-                            selectedLongitude = lng.toDoubleOrNull() ?: 77.2090,
+                            selectedLatitude = sanitizedLat,
+                            selectedLongitude = sanitizedLng,
                             onLocationSelected = { newLat, newLng ->
                                 lat = String.format(Locale.US, "%.4f", newLat)
                                 lng = String.format(Locale.US, "%.4f", newLng)
@@ -466,11 +477,27 @@ fun JourneyScreen(
         )
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
+    var hasNotificationPermission by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            } else true
+        )
+    }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         hasLocationPermission = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasNotificationPermission = isGranted
     }
 
     var dropdownExpanded by remember { mutableStateOf(false) }
@@ -498,17 +525,43 @@ fun JourneyScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     Button(
                         onClick = {
-                            val perms = mutableListOf(
+                            val perms = arrayOf(
                                 Manifest.permission.ACCESS_FINE_LOCATION,
                                 Manifest.permission.ACCESS_COARSE_LOCATION
                             )
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                perms.add(Manifest.permission.POST_NOTIFICATIONS)
-                            }
-                            permissionLauncher.launch(perms.toTypedArray())
+                            locationPermissionLauncher.launch(perms)
                         }
                     ) {
                         Text(strings.grantPermissions)
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        // Separate Notification Permission Flow for Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = strings.notificationPermissionNotice,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    ) {
+                        Text(strings.grantNotificationPermission)
                     }
                 }
             }
@@ -919,7 +972,15 @@ fun SettingsScreen(
     onInstallApk: (File) -> Unit,
     onClearAllData: () -> Unit
 ) {
+    val context = LocalContext.current
     var showClearDataDialog by remember { mutableStateOf(false) }
+    var showHelpDialog by remember { mutableStateOf(false) }
+
+    var feedbackCategory by remember { mutableStateOf(strings.categorySuggestion) }
+    var feedbackSubject by remember { mutableStateOf("") }
+    var feedbackMessage by remember { mutableStateOf("") }
+    var feedbackContact by remember { mutableStateOf("") }
+    var feedbackError by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
         modifier = Modifier
@@ -1018,6 +1079,29 @@ fun SettingsScreen(
                         checked = userSettings.isVibrationEnabled,
                         onCheckedChange = onVibrationToggled
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Help & Feedback Button Card
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = strings.helpAndFeedbackTitle, style = MaterialTheme.typography.titleMedium)
+                        Text(text = strings.troubleshootingTitle, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Button(onClick = { showHelpDialog = true }) {
+                        Icon(Icons.Default.Help, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Open")
+                    }
                 }
             }
 
@@ -1169,6 +1253,92 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    if (showHelpDialog) {
+        AlertDialog(
+            onDismissRequest = { showHelpDialog = false },
+            title = { Text(strings.helpAndFeedbackTitle) },
+            text = {
+                Column {
+                    Text(text = strings.troubleshootingTitle, style = MaterialTheme.typography.titleSmall)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = strings.troubleshootingBody, style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(text = strings.feedbackCategoryPrompt, style = MaterialTheme.typography.titleSmall)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        listOf(strings.categorySuggestion, strings.categoryComplaint, strings.categoryFeatureRequest).forEach { cat ->
+                            FilterChip(
+                                selected = feedbackCategory == cat,
+                                onClick = { feedbackCategory = cat },
+                                label = { Text(cat, style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = feedbackSubject,
+                        onValueChange = { feedbackSubject = it },
+                        label = { Text(strings.feedbackSubject) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = feedbackMessage,
+                        onValueChange = { feedbackMessage = it },
+                        label = { Text(strings.feedbackMessage) },
+                        modifier = Modifier.fillMaxWidth().height(100.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = feedbackContact,
+                        onValueChange = { feedbackContact = it },
+                        label = { Text(strings.feedbackContactInfo) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    feedbackError?.let { err ->
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (feedbackSubject.isBlank() || feedbackMessage.isBlank()) {
+                            feedbackError = strings.feedbackValidationError
+                        } else {
+                            val shareBody = "Category: $feedbackCategory\nSubject: $feedbackSubject\nContact: $feedbackContact\n\n$feedbackMessage"
+                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, "Pingoo Feedback: $feedbackSubject")
+                                putExtra(Intent.EXTRA_TEXT, shareBody)
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(Intent.createChooser(sendIntent, "Share Feedback"))
+                            showHelpDialog = false
+                            feedbackSubject = ""
+                            feedbackMessage = ""
+                            feedbackError = null
+                        }
+                    }
+                ) {
+                    Text(strings.sendFeedbackButton)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showHelpDialog = false }) {
+                    Text(strings.cancel)
+                }
+            }
+        )
     }
 
     if (showClearDataDialog) {
