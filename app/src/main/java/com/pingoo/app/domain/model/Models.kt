@@ -21,6 +21,8 @@ data class Destination(
     val isActive: Boolean = true,
     val alarmSound: String = "default",
     val vibrate: Boolean = true,
+    val isFavorite: Boolean = false,
+    val placeLabel: String = "", // e.g. "Home", "Work", "College"
     val createdAt: Long = System.currentTimeMillis()
 )
 

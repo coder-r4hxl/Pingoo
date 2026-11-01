@@ -26,6 +26,12 @@ class DestinationRepositoryImpl(
         }
     }
 
+    fun getFavoriteDestinations(): Flow<List<Destination>> {
+        return destinationDao.getFavoriteDestinations().map { entities ->
+            entities.map { it.toDomain() }
+        }
+    }
+
     override suspend fun getDestinationById(id: Long): Destination? {
         return destinationDao.getDestinationById(id)?.toDomain()
     }
@@ -44,6 +50,14 @@ class DestinationRepositoryImpl(
 
     override suspend fun toggleDestinationActive(id: Long, isActive: Boolean) {
         destinationDao.updateActiveState(id, isActive)
+    }
+
+    suspend fun toggleFavorite(id: Long, isFavorite: Boolean) {
+        destinationDao.updateFavoriteState(id, isFavorite)
+    }
+
+    suspend fun updatePlaceLabel(id: Long, label: String) {
+        destinationDao.updatePlaceLabel(id, label)
     }
 }
 

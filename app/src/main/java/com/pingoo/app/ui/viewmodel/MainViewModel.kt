@@ -16,6 +16,7 @@ import com.pingoo.app.data.local.entity.JourneyStopEntity
 import com.pingoo.app.data.repository.DestinationRepositoryImpl
 import com.pingoo.app.data.repository.SettingsRepositoryImpl
 import com.pingoo.app.domain.engine.MultiStopEvaluation
+import com.pingoo.app.domain.history.HistoryExportHelper
 import com.pingoo.app.domain.model.Destination
 import com.pingoo.app.domain.model.JourneyHistoryItem
 import com.pingoo.app.domain.model.JourneyState
@@ -108,6 +109,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = emptyList()
         )
 
+    val savedJourneys: StateFlow<List<JourneyEntity>> = journeyDao.getAllJourneys()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
     val journeyHistory: StateFlow<List<JourneyHistoryItem>> = journeyHistoryDao.getAllHistory()
         .map { list ->
             list.map { entity ->
@@ -166,14 +174,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun checkForAppUpdates() {
         _updateStatus.value = UpdateStatus.Checking
         viewModelScope.launch {
-            // Simulated stable release check against latest release manifest structure
             withContext(Dispatchers.IO) {
                 try {
-                    // Current installed versionCode is 1
                     val currentVersionCode = 1
-                    // Simulated candidate update manifest for verification
                     val candidateManifest = ReleaseManifest(
-                        versionCode = 1, // Same version -> Up to date
+                        versionCode = 1,
                         versionName = "1.0.0",
                         apkUrl = "https://github.com/coder-r4hxl/Pingoo/releases/download/v1.0.0/app-debug.apk",
                         sha256Checksum = "",
@@ -243,6 +248,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearStagedStops() {
         _stagedStops.value = emptyList()
+    }
+
+    fun loadSavedJourney(journeyEntity: JourneyEntity) {
+        viewModelScope.launch {
+            val stopEntities = journeyDao.getStopsForJourney(journeyEntity.id)
+            val loadedDestinations = mutableListOf<Destination>()
+            for (stop in stopEntities) {
+                val dest = destinationRepository.getDestinationById(stop.destinationId)
+                if (dest != null) {
+                    loadedDestinations.add(dest)
+                }
+            }
+            _stagedStops.value = loadedDestinations
+        }
     }
 
     fun startSingleDestinationJourney(destination: Destination) {
@@ -371,6 +390,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun exportHistoryCsv(context: Context) {
+        val items = journeyHistory.value
+        val csv = HistoryExportHelper.generateCsv(items)
+        val shareIntent = HistoryExportHelper.createShareIntent(csv)
+        val chooser = Intent.createChooser(shareIntent, "Export Journey History CSV").apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(chooser)
+    }
+
     fun changeLanguage(language: Language) {
         viewModelScope.launch {
             settingsRepository.updateLanguage(language.code)
@@ -395,11 +424,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun toggleDestinationFavorite(destination: Destination) {
+        viewModelScope.launch {
+            destinationRepository.toggleFavorite(destination.id, !destination.isFavorite)
+        }
+    }
+
+    fun updatePlaceLabel(destination: Destination, label: String) {
+        viewModelScope.launch {
+            destinationRepository.updatePlaceLabel(destination.id, label)
+        }
+    }
+
     fun addDestination(
         name: String,
         latStr: String,
         lngStr: String,
         radiusStr: String,
+        label: String = "",
+        isFavorite: Boolean = false,
         onResult: (ValidationResult) -> Unit
     ) {
         val lat = latStr.toDoubleOrNull()
@@ -424,7 +467,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         latitude = lat!!,
                         longitude = lng!!,
                         arrivalRadiusMeters = radius,
-                        advanceWarningRadiusMeters = advanceWarning
+                        advanceWarningRadiusMeters = advanceWarning,
+                        placeLabel = label.trim(),
+                        isFavorite = isFavorite
                     )
                 )
             }

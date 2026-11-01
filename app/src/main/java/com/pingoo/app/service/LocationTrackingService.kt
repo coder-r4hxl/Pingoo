@@ -270,6 +270,20 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val pauseIntent = PendingIntent.getService(
+            this,
+            2,
+            Intent(this, LocationTrackingService::class.java).apply { action = ACTION_PAUSE_SERVICE },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val resumeIntent = PendingIntent.getService(
+            this,
+            3,
+            Intent(this, LocationTrackingService::class.java).apply { action = ACTION_RESUME_SERVICE },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val stopName = eval.activeStop?.destination?.name ?: "Destination"
         val distText = DistanceFormatter.formatDistance(eval.distanceToActiveStopMeters)
         val stopProgressText = if (eval.totalStops > 0) "Stop ${eval.activeStopIndex + 1}/${eval.totalStops}: $stopName" else stopName
@@ -285,15 +299,23 @@ class LocationTrackingService : Service(), LocationListener, LocationServiceCont
 
         val contentText = "$stopProgressText • Rem: $distText"
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(contentTitle)
             .setContentText(contentText)
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(pendingIntent)
             .setOngoing(eval.journeyState != JourneyState.IDLE && eval.journeyState != JourneyState.ARRIVED)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
+
+        if (eval.journeyState == JourneyState.TRACKING || eval.journeyState == JourneyState.APPROACHING) {
+            builder.addAction(android.R.drawable.ic_media_pause, "Pause", pauseIntent)
+        } else if (eval.journeyState == JourneyState.PAUSED) {
+            builder.addAction(android.R.drawable.ic_media_play, "Resume", resumeIntent)
+        }
+
+        builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopIntent)
+
+        return builder.build()
     }
 
     private fun updateNotification(eval: MultiStopEvaluation) {

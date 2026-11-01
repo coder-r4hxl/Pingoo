@@ -23,6 +23,9 @@ interface JourneyDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertJourneyStops(stops: List<JourneyStopEntity>)
 
+    @Query("SELECT * FROM journeys ORDER BY createdAt DESC")
+    fun getAllJourneys(): Flow<List<JourneyEntity>>
+
     @Query("SELECT * FROM journeys WHERE id = :journeyId")
     suspend fun getJourneyById(journeyId: Long): JourneyEntity?
 

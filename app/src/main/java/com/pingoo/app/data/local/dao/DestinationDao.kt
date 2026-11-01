@@ -11,11 +11,14 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface DestinationDao {
-    @Query("SELECT * FROM destinations ORDER BY createdAt DESC")
+    @Query("SELECT * FROM destinations ORDER BY isFavorite DESC, createdAt DESC")
     fun getAllDestinations(): Flow<List<DestinationEntity>>
 
-    @Query("SELECT * FROM destinations WHERE isActive = 1 ORDER BY createdAt DESC")
+    @Query("SELECT * FROM destinations WHERE isActive = 1 ORDER BY isFavorite DESC, createdAt DESC")
     fun getActiveDestinations(): Flow<List<DestinationEntity>>
+
+    @Query("SELECT * FROM destinations WHERE isFavorite = 1 ORDER BY createdAt DESC")
+    fun getFavoriteDestinations(): Flow<List<DestinationEntity>>
 
     @Query("SELECT * FROM destinations WHERE id = :id LIMIT 1")
     suspend fun getDestinationById(id: Long): DestinationEntity?
@@ -31,4 +34,10 @@ interface DestinationDao {
 
     @Query("UPDATE destinations SET isActive = :isActive WHERE id = :id")
     suspend fun updateActiveState(id: Long, isActive: Boolean)
+
+    @Query("UPDATE destinations SET isFavorite = :isFavorite WHERE id = :id")
+    suspend fun updateFavoriteState(id: Long, isFavorite: Boolean)
+
+    @Query("UPDATE destinations SET placeLabel = :label WHERE id = :id")
+    suspend fun updatePlaceLabel(id: Long, label: String)
 }

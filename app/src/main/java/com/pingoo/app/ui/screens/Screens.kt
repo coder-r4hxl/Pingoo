@@ -15,12 +15,17 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
@@ -30,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.pingoo.app.data.local.entity.JourneyEntity
 import com.pingoo.app.domain.engine.MultiStopEvaluation
 import com.pingoo.app.domain.model.Destination
 import com.pingoo.app.domain.model.JourneyHistoryItem
@@ -79,6 +85,12 @@ fun HomeScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                AssistChip(
+                    onClick = {},
+                    label = { Text(strings.offlineDataBadge) },
+                    leadingIcon = { Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                )
             }
         }
 
@@ -121,11 +133,21 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
-                                Text(
-                                    text = destination.name,
-                                    style = MaterialTheme.typography.titleMedium
-                                )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = destination.name,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    if (destination.placeLabel.isNotBlank()) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        SuggestionChip(
+                                            onClick = {},
+                                            label = { Text(destination.placeLabel, style = MaterialTheme.typography.labelSmall) },
+                                            modifier = Modifier.height(24.dp)
+                                        )
+                                    }
+                                }
                                 Text(
                                     text = "Lat: ${destination.latitude}, Lng: ${destination.longitude}",
                                     style = MaterialTheme.typography.bodySmall
@@ -152,9 +174,11 @@ fun DestinationsScreen(
     strings: AppStrings,
     destinations: List<Destination>,
     language: Language,
-    onAddDestination: (String, String, String, String, (ValidationResult) -> Unit) -> Unit,
+    onAddDestination: (String, String, String, String, String, Boolean, (ValidationResult) -> Unit) -> Unit,
     onDeleteDestination: (Destination) -> Unit,
-    onToggleDestination: (Destination) -> Unit
+    onToggleDestination: (Destination) -> Unit,
+    onToggleFavorite: (Destination) -> Unit,
+    onSetPlaceLabel: (Destination, String) -> Unit
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
     var showMapPicker by remember { mutableStateOf(false) }
@@ -163,6 +187,8 @@ fun DestinationsScreen(
     var lat by remember { mutableStateOf("28.6139") }
     var lng by remember { mutableStateOf("77.2090") }
     var radius by remember { mutableStateOf("500") }
+    var selectedLabel by remember { mutableStateOf("") }
+    var isFavorite by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
@@ -219,11 +245,28 @@ fun DestinationsScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(text = dest.name, style = MaterialTheme.typography.titleMedium)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(text = dest.name, style = MaterialTheme.typography.titleMedium)
+                                        if (dest.placeLabel.isNotBlank()) {
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            SuggestionChip(
+                                                onClick = {},
+                                                label = { Text(dest.placeLabel, style = MaterialTheme.typography.labelSmall) },
+                                                modifier = Modifier.height(24.dp)
+                                            )
+                                        }
+                                    }
                                     Text(text = "Coordinates: ${dest.latitude}, ${dest.longitude}")
                                     Text(text = "${strings.arrivalRadius}: ${dest.arrivalRadiusMeters}m")
                                 }
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { onToggleFavorite(dest) }) {
+                                        Icon(
+                                            imageVector = if (dest.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                            contentDescription = "Favorite",
+                                            tint = if (dest.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                     Switch(
                                         checked = dest.isActive,
                                         onCheckedChange = { onToggleDestination(dest) }
@@ -254,6 +297,27 @@ fun DestinationsScreen(
                             label = { Text(strings.destinationName) },
                             singleLine = true
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(text = "Place Label:", style = MaterialTheme.typography.bodySmall)
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            FilterChip(
+                                selected = selectedLabel == strings.labelHome,
+                                onClick = { selectedLabel = if (selectedLabel == strings.labelHome) "" else strings.labelHome },
+                                label = { Text(strings.labelHome) }
+                            )
+                            FilterChip(
+                                selected = selectedLabel == strings.labelWork,
+                                onClick = { selectedLabel = if (selectedLabel == strings.labelWork) "" else strings.labelWork },
+                                label = { Text(strings.labelWork) }
+                            )
+                            FilterChip(
+                                selected = selectedLabel == strings.labelCollege,
+                                onClick = { selectedLabel = if (selectedLabel == strings.labelCollege) "" else strings.labelCollege },
+                                label = { Text(strings.labelCollege) }
+                            )
+                        }
+
                         Spacer(modifier = Modifier.height(8.dp))
 
                         OutlinedButton(
@@ -312,11 +376,12 @@ fun DestinationsScreen(
                 confirmButton = {
                     Button(
                         onClick = {
-                            onAddDestination(name, lat, lng, radius) { result ->
+                            onAddDestination(name, lat, lng, radius, selectedLabel, isFavorite) { result ->
                                 when (result) {
                                     is ValidationResult.Success -> {
                                         showAddDialog = false
                                         name = ""
+                                        selectedLabel = ""
                                         errorMessage = null
                                     }
                                     is ValidationResult.Error -> {
@@ -353,8 +418,8 @@ fun DestinationsScreen(
                             selectedLatitude = lat.toDoubleOrNull() ?: 28.6139,
                             selectedLongitude = lng.toDoubleOrNull() ?: 77.2090,
                             onLocationSelected = { newLat, newLng ->
-                                lat = String.format("%.4f", newLat)
-                                lng = String.format("%.4f", newLng)
+                                lat = String.format(Locale.US, "%.4f", newLat)
+                                lng = String.format(Locale.US, "%.4f", newLng)
                             },
                             modifier = Modifier.fillMaxSize()
                         )
@@ -375,6 +440,7 @@ fun DestinationsScreen(
 fun JourneyScreen(
     strings: AppStrings,
     destinations: List<Destination>,
+    savedJourneys: List<JourneyEntity>,
     selectedDestination: Destination?,
     stagedStops: List<Destination>,
     evaluation: MultiStopEvaluation,
@@ -384,6 +450,7 @@ fun JourneyScreen(
     onRemoveStagedStop: (Int) -> Unit,
     onMoveStagedStopUp: (Int) -> Unit,
     onMoveStagedStopDown: (Int) -> Unit,
+    onLoadSavedJourney: (JourneyEntity) -> Unit,
     onStartMultiStopJourney: (String) -> Unit,
     onPauseJourney: () -> Unit,
     onResumeJourney: () -> Unit,
@@ -506,6 +573,17 @@ fun JourneyScreen(
                         text = "${strings.distanceToDestination}: ${DistanceFormatter.formatDistance(evaluation.distanceToActiveStopMeters, language)}",
                         style = MaterialTheme.typography.headlineSmall
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    val etaText = DistanceFormatter.formatEta(
+                        evaluation.distanceToActiveStopMeters,
+                        evaluation.lastFix?.speedMetersPerSecond,
+                        language
+                    )
+                    Text(
+                        text = "${strings.estimatedArrivalLabel}: $etaText",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Status: ${evaluation.statusMessage}",
@@ -570,6 +648,23 @@ fun JourneyScreen(
                 }
             }
         } else {
+            // Reusable saved journeys quick-loader
+            if (savedJourneys.isNotEmpty()) {
+                Text(text = strings.savedJourneysHeader, style = MaterialTheme.typography.titleSmall)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    savedJourneys.take(3).forEach { sj ->
+                        FilledTonalButton(
+                            onClick = { onLoadSavedJourney(sj) },
+                            modifier = Modifier.padding(end = 6.dp)
+                        ) {
+                            Text(sj.title, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             Text(text = strings.multiStopTitle, style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -699,7 +794,8 @@ fun HistoryScreen(
     strings: AppStrings,
     historyItems: List<JourneyHistoryItem>,
     onDeleteHistoryItem: (JourneyHistoryItem) -> Unit,
-    onClearAllHistory: () -> Unit
+    onClearAllHistory: () -> Unit,
+    onExportHistory: () -> Unit
 ) {
     var showConfirmClearDialog by remember { mutableStateOf(false) }
 
@@ -715,8 +811,15 @@ fun HistoryScreen(
         ) {
             Text(text = strings.historyTitle, style = MaterialTheme.typography.headlineMedium)
             if (historyItems.isNotEmpty()) {
-                TextButton(onClick = { showConfirmClearDialog = true }) {
-                    Text(strings.clearHistory, color = MaterialTheme.colorScheme.error)
+                Row {
+                    OutlinedButton(onClick = onExportHistory, modifier = Modifier.padding(end = 4.dp)) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(strings.exportHistory)
+                    }
+                    TextButton(onClick = { showConfirmClearDialog = true }) {
+                        Text(strings.clearHistory, color = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
         }

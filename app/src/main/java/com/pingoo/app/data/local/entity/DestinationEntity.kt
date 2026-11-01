@@ -16,6 +16,8 @@ data class DestinationEntity(
     val isActive: Boolean,
     val alarmSound: String,
     val vibrate: Boolean,
+    val isFavorite: Boolean = false,
+    val placeLabel: String = "",
     val createdAt: Long
 ) {
     fun toDomain(): Destination = Destination(
@@ -28,6 +30,8 @@ data class DestinationEntity(
         isActive = isActive,
         alarmSound = alarmSound,
         vibrate = vibrate,
+        isFavorite = isFavorite,
+        placeLabel = placeLabel,
         createdAt = createdAt
     )
 
@@ -42,6 +46,8 @@ data class DestinationEntity(
             isActive = destination.isActive,
             alarmSound = destination.alarmSound,
             vibrate = destination.vibrate,
+            isFavorite = destination.isFavorite,
+            placeLabel = destination.placeLabel,
             createdAt = destination.createdAt
         )
     }

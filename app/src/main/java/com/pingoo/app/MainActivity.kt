@@ -21,6 +21,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -86,8 +87,10 @@ fun MainAppScreen(
     val selectedDestination by viewModel.selectedDestination.collectAsState()
     val stagedStops by viewModel.stagedStops.collectAsState()
     val multiStopEvaluation by viewModel.multiStopEvaluation.collectAsState()
+    val savedJourneys by viewModel.savedJourneys.collectAsState()
     val journeyHistory by viewModel.journeyHistory.collectAsState()
     val updateStatus by viewModel.updateStatus.collectAsState()
+    val context = LocalContext.current
 
     Scaffold(
         bottomBar = {
@@ -136,17 +139,20 @@ fun MainAppScreen(
                     strings = strings,
                     destinations = destinations,
                     language = userSettings.language,
-                    onAddDestination = { name, lat, lng, radius, callback ->
-                        viewModel.addDestination(name, lat, lng, radius, callback)
+                    onAddDestination = { name, lat, lng, radius, label, isFav, callback ->
+                        viewModel.addDestination(name, lat, lng, radius, label, isFav, callback)
                     },
                     onDeleteDestination = { viewModel.deleteDestination(it) },
-                    onToggleDestination = { viewModel.toggleDestinationActive(it) }
+                    onToggleDestination = { viewModel.toggleDestinationActive(it) },
+                    onToggleFavorite = { viewModel.toggleDestinationFavorite(it) },
+                    onSetPlaceLabel = { dest, label -> viewModel.updatePlaceLabel(dest, label) }
                 )
             }
             composable(Screen.Journey.route) {
                 JourneyScreen(
                     strings = strings,
                     destinations = destinations,
+                    savedJourneys = savedJourneys,
                     selectedDestination = selectedDestination,
                     stagedStops = stagedStops,
                     evaluation = multiStopEvaluation,
@@ -156,6 +162,7 @@ fun MainAppScreen(
                     onRemoveStagedStop = { viewModel.removeStagedStop(it) },
                     onMoveStagedStopUp = { viewModel.moveStagedStopUp(it) },
                     onMoveStagedStopDown = { viewModel.moveStagedStopDown(it) },
+                    onLoadSavedJourney = { viewModel.loadSavedJourney(it) },
                     onStartMultiStopJourney = { viewModel.startStagedMultiStopJourney(it) },
                     onPauseJourney = { viewModel.pauseJourney() },
                     onResumeJourney = { viewModel.resumeJourney() },
@@ -168,7 +175,8 @@ fun MainAppScreen(
                     strings = strings,
                     historyItems = journeyHistory,
                     onDeleteHistoryItem = { viewModel.deleteHistoryItem(it) },
-                    onClearAllHistory = { viewModel.clearAllHistory() }
+                    onClearAllHistory = { viewModel.clearAllHistory() },
+                    onExportHistory = { viewModel.exportHistoryCsv(context) }
                 )
             }
             composable(Screen.Settings.route) {
