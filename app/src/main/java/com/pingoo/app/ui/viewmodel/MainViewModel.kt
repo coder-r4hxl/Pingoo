@@ -87,6 +87,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = UserSettings()
         )
 
+    val hasCompletedOnboarding: StateFlow<Boolean> = userPreferencesRepository.hasCompletedOnboarding
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = true
+        )
+
     val strings: StateFlow<AppStrings> = userSettings.map { settings ->
         Translations.get(settings.language)
     }.stateIn(
@@ -398,6 +405,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(chooser)
+    }
+
+    fun setOnboardingCompleted() {
+        viewModelScope.launch {
+            userPreferencesRepository.setOnboardingCompleted(true)
+        }
+    }
+
+    fun toggleDarkTheme(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setDarkTheme(enabled)
+        }
     }
 
     fun changeLanguage(language: Language) {

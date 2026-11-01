@@ -32,6 +32,7 @@ import com.pingoo.app.ui.screens.DestinationsScreen
 import com.pingoo.app.ui.screens.HistoryScreen
 import com.pingoo.app.ui.screens.HomeScreen
 import com.pingoo.app.ui.screens.JourneyScreen
+import com.pingoo.app.ui.screens.OnboardingScreen
 import com.pingoo.app.ui.screens.SettingsScreen
 import com.pingoo.app.ui.theme.PingooTheme
 import com.pingoo.app.ui.viewmodel.MainViewModel
@@ -47,15 +48,23 @@ class MainActivity : ComponentActivity() {
             val strings by viewModel.strings.collectAsState()
             val destinations by viewModel.destinations.collectAsState()
             val activeDestinations by viewModel.activeDestinations.collectAsState()
+            val hasCompletedOnboarding by viewModel.hasCompletedOnboarding.collectAsState()
 
             PingooTheme(darkTheme = userSettings.darkTheme) {
-                MainAppScreen(
-                    strings = strings,
-                    userSettings = userSettings,
-                    destinations = destinations,
-                    activeDestinations = activeDestinations,
-                    viewModel = viewModel
-                )
+                if (!hasCompletedOnboarding) {
+                    OnboardingScreen(
+                        strings = strings,
+                        onGetStarted = { viewModel.setOnboardingCompleted() }
+                    )
+                } else {
+                    MainAppScreen(
+                        strings = strings,
+                        userSettings = userSettings,
+                        destinations = destinations,
+                        activeDestinations = activeDestinations,
+                        viewModel = viewModel
+                    )
+                }
             }
         }
     }
@@ -185,6 +194,7 @@ fun MainAppScreen(
                     userSettings = userSettings,
                     updateStatus = updateStatus,
                     onLanguageSelected = { viewModel.changeLanguage(it) },
+                    onDarkThemeToggled = { viewModel.toggleDarkTheme(it) },
                     onVibrationToggled = { viewModel.toggleVibration(it) },
                     onSnoozeDurationSelected = { viewModel.setSnoozeDuration(it) },
                     onCheckForUpdates = { viewModel.checkForAppUpdates() },

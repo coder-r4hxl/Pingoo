@@ -24,6 +24,7 @@ class UserPreferencesRepository(private val context: Context) {
         val DEFAULT_ADVANCE_WARNING = intPreferencesKey("default_advance_warning_meters")
         val SNOOZE_DURATION = intPreferencesKey("snooze_duration_minutes")
         val DARK_THEME = booleanPreferencesKey("dark_theme")
+        val HAS_COMPLETED_ONBOARDING = booleanPreferencesKey("has_completed_onboarding")
     }
 
     val userSettings: Flow<UserSettings> = context.dataStore.data.map { preferences ->
@@ -36,6 +37,22 @@ class UserPreferencesRepository(private val context: Context) {
             snoozeDurationMinutes = preferences[Keys.SNOOZE_DURATION] ?: 5,
             darkTheme = preferences[Keys.DARK_THEME] ?: false
         )
+    }
+
+    val hasCompletedOnboarding: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[Keys.HAS_COMPLETED_ONBOARDING] ?: false
+    }
+
+    suspend fun setOnboardingCompleted(completed: Boolean = true) {
+        context.dataStore.edit { preferences ->
+            preferences[Keys.HAS_COMPLETED_ONBOARDING] = completed
+        }
+    }
+
+    suspend fun setDarkTheme(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[Keys.DARK_THEME] = enabled
+        }
     }
 
     suspend fun setLanguage(languageCode: String) {

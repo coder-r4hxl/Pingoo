@@ -911,6 +911,7 @@ fun SettingsScreen(
     userSettings: UserSettings,
     updateStatus: UpdateStatus,
     onLanguageSelected: (Language) -> Unit,
+    onDarkThemeToggled: (Boolean) -> Unit,
     onVibrationToggled: (Boolean) -> Unit,
     onSnoozeDurationSelected: (Int) -> Unit,
     onCheckForUpdates: () -> Unit,
@@ -928,6 +929,25 @@ fun SettingsScreen(
         item {
             Text(text = strings.settingsTitle, style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(16.dp))
+
+            // Dark Mode Selection
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = strings.darkThemeSetting, style = MaterialTheme.typography.titleMedium)
+                    Switch(
+                        checked = userSettings.darkTheme,
+                        onCheckedChange = onDarkThemeToggled
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Language Selection
             Card(modifier = Modifier.fillMaxWidth()) {
